@@ -1,0 +1,35 @@
+# Run from root of repo:
+# DOCKER_BUILDKIT=1 docker build --progress=plain --build-arg GITLAB_TOKEN=<GITLAB_TOKEN> -t pycusfm-wheel  -f docker/Dockerfile.wheel .
+FROM nvcr.io/nvidia/tensorrt:24.12-py3
+ARG GITLAB_TOKEN
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update
+RUN apt-get install -y libopencv-dev=4.6.0+dfsg-13.1ubuntu1 libgoogle-glog-dev libgflags-dev
+RUN apt-get install -y git cmake build-essential
+
+# Install Abseil and Protobuf dependencies
+RUN apt-get update && apt-get install -y \
+    libabsl-dev \
+    libprotobuf-dev \
+    protobuf-compiler
+
+# Install build dependency for building wheels
+RUN pip install build twine
+
+# Copy the project files
+COPY . /workspace
+WORKDIR /workspace
+
+# Build the wheel
+RUN python3 -m build --wheel
+
+# Verify wheel file was created and save filename
+RUN ls -la /workspace/dist/*.whl
+RUN WHEEL_FILE=$(ls /workspace/dist/*.whl | head -1) && echo "WHEEL_FILE=$WHEEL_FILE" > /tmp/wheel_env
+
+RUN mkdir wheels
+WORKDIR /wheels
+RUN . /tmp/wheel_env && mv $WHEEL_FILE .
+
+# Un comment to upload wheels (must have maintainer status in PyCuSFM repo)
+# RUN twine upload --username=oauth2 --password=${GITLAB_TOKEN}  --repository-url https://gitlab-master.nvidia.com/api/v4/projects/176366/packages/pypi /wheels/*.whl --skip-existing --verbose --non-interactive

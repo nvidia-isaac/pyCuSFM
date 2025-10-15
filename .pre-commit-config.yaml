@@ -1,0 +1,15 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+  - repo: https://github.com/google/yapf
+    rev: v0.43.0 # Use the latest version
+    hooks:
+      - id: yapf
+        name: yapf
+        description: "A formatter for Python files."
+        args: [--style=.style.yapf]

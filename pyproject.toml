@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=64.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pycusfm"
+version = "0.1.8"
+authors = [
+    {name = "NVIDIA CORPORATION & AFFILIATES", email = "dizeng@nvidia.com"},
+]
+description = "Packages that includes, python command line tools for CuSFM: CUDA-accelerated Structure from Motion"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Environment :: GPU :: NVIDIA CUDA",
+]
+# Dynamic dependencies are now handled in setup.py based on system TensorRT availability
+dependencies = [
+    "numpy>=1.18.0",
+    "setuptools",
+    "tensorrt-cu12>=10.3.0.26",
+    "Pillow",
+]
+
+[project.urls]
+"Homepage" = "https://gitlab-master.nvidia.com/visual_mapping/pycusfm"
+
+[project.scripts]
+cusfm_cli = "pycusfm.cusfm_cli:main"
+cusfm_tool = "pycusfm.binary_runner:main"
+
+[tool.setuptools]
+packages = ["pycusfm"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+pycusfm = ["bin/*", "lib/*", "configs/**/*", "models/**/*"]

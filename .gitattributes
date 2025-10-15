@@ -1,0 +1,36 @@
+# Images
+*.gif filter=lfs diff=lfs merge=lfs -text
+*.jpg filter=lfs diff=lfs merge=lfs -text
+*.JPG filter=lfs diff=lfs merge=lfs -text
+*.jpeg filter=lfs diff=lfs merge=lfs -text
+*.png filter=lfs diff=lfs merge=lfs -text
+*.psd filter=lfs diff=lfs merge=lfs -text
+*.pgm filter=lfs diff=lfs merge=lfs -text
+# Archives
+*.gz filter=lfs diff=lfs merge=lfs -text
+*.tar filter=lfs diff=lfs merge=lfs -text
+*.zip filter=lfs diff=lfs merge=lfs -text
+*.zstd filter=lfs diff=lfs merge=lfs -text
+# Recordings
+*.bag filter=lfs diff=lfs merge=lfs -text
+*.mcap filter=lfs diff=lfs merge=lfs -text
+# Documents
+*.pdf filter=lfs diff=lfs merge=lfs -text
+# Debian packages
+*.deb filter=lfs diff=lfs merge=lfs -text
+# trtexec
+trtexec_x86_64 filter=lfs diff=lfs merge=lfs -text
+# Binary files
+*.obj filter=lfs diff=lfs merge=lfs -text
+*.db3 filter=lfs diff=lfs merge=lfs -text
+# ONNX Engines and models
+*.onnx filter=lfs diff=lfs merge=lfs -text
+# TRT Engine file
+*.engine  filter=lfs diff=lfs merge=lfs -text
+# Foxglove plugins
+*.foxe filter=lfs diff=lfs merge=lfs -text
+pycusfm/bin/* filter=lfs diff=lfs merge=lfs -text
+pycusfm/lib/* filter=lfs diff=lfs merge=lfs -text
+pycusfm/models/* filter=lfs diff=lfs merge=lfs -text
+data/* filter=lfs diff=lfs merge=lfs -text
+*.json filter=lfs diff=lfs merge=lfs -text

@@ -1,0 +1,26 @@
+aliked_detector {
+  max_key_points_for_tensorrt: 4000
+  detector_threshold: 0.005
+
+  num_points_tolerance_fraction: 0.3
+  global_non_max_method: SUPPRESSION_VIA_SQUARE_COVERING
+
+  tensorrt_config {
+    model_id: 0
+    model_name: "aliked"
+    input_dimension {
+      min: 1
+      min: 3
+      min: 100
+      min: 100
+      opt: 1
+      opt: 3
+      opt: 1200
+      opt: 1920
+      max: 1
+      max: 3
+      max: 2400
+      max: 4000
+    }
+  }
+}

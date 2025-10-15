@@ -1,0 +1,54 @@
+lightglue_params {
+  match_threshold: 0.99
+  match_top_k: 500
+  global_non_max_method: SUPPRESSION_VIA_SQUARE_COVERING
+  num_points_tolerance_fraction: 0.3
+
+  aliked_tensorrt_config{
+    model_id: 0
+    input_dimension {
+      min: 1
+      min: 1
+      min: 2
+      opt: 1
+      opt: 3200
+      opt: 2
+      max: 1
+      max: 5500
+      max: 2
+    }
+    input_dimension {
+      min: 1
+      min: 1
+      min: 2
+      opt: 1
+      opt: 3200
+      opt: 2
+      max: 1
+      max: 5500
+      max: 2
+    }
+    input_dimension {
+      min: 1
+      min: 1
+      min: 128
+      opt: 1
+      opt: 3200
+      opt: 128
+      max: 1
+      max: 5500
+      max: 128
+    }
+    input_dimension {
+      min: 1
+      min: 1
+      min: 128
+      opt: 1
+      opt: 3200
+      opt: 128
+      max: 1
+      max: 5500
+      max: 128
+    }
+  }
+}
