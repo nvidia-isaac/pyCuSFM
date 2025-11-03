@@ -74,6 +74,7 @@ def main():
     parser.add_argument('--config_dir', default=None, help="Config directory")
     parser.add_argument('--feature_type', default=None, help='Feature type')
     parser.add_argument('--mask_dir', default=None, help='Mask directory')
+    parser.add_argument('--model_dir', default=None, help='Model directory for feature extraction')
     parser.add_argument(
         '--steps_to_run',
         nargs='+',
@@ -116,6 +117,8 @@ def main():
     add_bool_argument(parser, 'dry_run', help='Dry run mode')
     add_bool_argument(
         parser, 'optimize_extrinsics', help='Actually optimize extrinsics')
+    add_bool_argument(
+        parser, 'optimize_intrinsics', help='Actually optimize intrinsics')
     add_bool_argument(
         parser, 'multi_track_input', help='If input is multi-track')
     add_bool_argument(
@@ -202,7 +205,8 @@ def main():
     parser.add_argument(
         '--feature_matching_batch_size',
         type=int,
-        help='Batch size for GPU-accelerated feature matching. If > 0, uses GPU batch matching'
+        help=
+        'Batch size for GPU-accelerated feature matching. If > 0, uses GPU batch matching'
     )
     parser.add_argument(
         '--max_keypoints_num',
@@ -266,6 +270,7 @@ def main():
         config_dir=args.config_dir,
         mask_dir=args.mask_dir,
         feature_type=args.feature_type,
+        model_dir=args.model_dir,
         num_threads=args.num_threads,
         override_frames_meta_file=args.override_frames_meta_file,
         cuvgl_dir=args.cuvgl_dir,
@@ -286,6 +291,7 @@ def main():
         dry_run=args.dry_run,
         ba_frame_type=args.ba_frame_type,
         optimize_extrinsics=args.optimize_extrinsics,
+        optimize_intrinsics=args.optimize_intrinsics,
         multi_track_input=args.multi_track_input,
         use_roll_shutter_correction=args.use_rsc,
         downsampling_matches=args.downsampling_matches,

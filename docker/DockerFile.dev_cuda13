@@ -1,0 +1,11 @@
+FROM nvcr.io/nvidia/tensorrt:25.09-py3
+
+RUN apt-get update
+RUN apt-get install -y libopencv-dev libgoogle-glog-dev libgflags-dev
+RUN apt-get install -y git cmake build-essential
+
+# Install Abseil and Protobuf dependencies
+RUN apt-get update && apt-get install -y \
+    libabsl-dev \
+    libprotobuf-dev \
+    protobuf-compiler

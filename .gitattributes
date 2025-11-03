@@ -32,5 +32,7 @@ trtexec_x86_64 filter=lfs diff=lfs merge=lfs -text
 pycusfm/bin/* filter=lfs diff=lfs merge=lfs -text
 pycusfm/lib/* filter=lfs diff=lfs merge=lfs -text
 pycusfm/models/* filter=lfs diff=lfs merge=lfs -text
+pycusfm/x86_cuda12/** filter=lfs diff=lfs merge=lfs -text
+pycusfm/x86_cuda13/** filter=lfs diff=lfs merge=lfs -text
 data/* filter=lfs diff=lfs merge=lfs -text
 *.json filter=lfs diff=lfs merge=lfs -text

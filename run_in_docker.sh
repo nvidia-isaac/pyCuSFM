@@ -12,27 +12,42 @@ set -e  # Exit on any error
 # Default values
 BUILD_DOCKER=false
 INSTALL_PYCUSFM=false
-DOCKER_IMAGE="pycusfm:latest"
+CUDA_VERSION="cuda13"
+DOCKER_IMAGE="pycusfm:cuda13"
 
 # Function to show usage
 show_usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
     echo "Options:"
+    echo "  --cuda <version>  Specify CUDA version (cuda12 or cuda13, default: cuda13)"
     echo "  --build_docker    Build Docker image before running container"
     echo "  --install         Install PyCuSFM inside the container after starting"
     echo "  -h, --help        Show this help message"
     echo ""
     echo "Examples:"
-    echo "  $0                           # Just run Docker container"
-    echo "  $0 --build_docker            # Build image then run container"
-    echo "  $0 --install                 # Run container and install PyCuSFM"
-    echo "  $0 --build_docker --install  # Build image, run container, and install PyCuSFM"
+    echo "  $0                                    # Run container with CUDA 13 (default)"
+    echo "  $0 --cuda cuda12                     # Run container with CUDA 12"
+    echo "  $0 --cuda cuda13 --build_docker      # Build CUDA 13 image then run container"
+    echo "  $0 --cuda cuda12 --install           # Run CUDA 12 container and install PyCuSFM"
+    echo "  $0 --cuda cuda13 --build_docker --install  # Build CUDA 13 image, run container, and install PyCuSFM"
 }
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --cuda)
+            if [[ -n "$2" && "$2" =~ ^(cuda12|cuda13)$ ]]; then
+                CUDA_VERSION="$2"
+                DOCKER_IMAGE="pycusfm:$2"
+                shift 2
+            else
+                echo "[ERROR] Invalid CUDA version: $2"
+                echo "[ERROR] Supported versions: cuda12, cuda13"
+                show_usage
+                exit 1
+            fi
+            ;;
         --build_docker)
             BUILD_DOCKER=true
             shift
@@ -71,14 +86,17 @@ fi
 
 # Function to build Docker image
 build_docker_image() {
-    echo "[INFO] Building Docker image..."
-    
-    if [[ ! -f "docker/DockerFile.dev" ]]; then
-        echo "[ERROR] docker/DockerFile.dev not found. Please run this script from the PyCuSFM root directory."
+    echo "[INFO] Building Docker image for $CUDA_VERSION..."
+
+    DOCKERFILE="docker/DockerFile.dev_$CUDA_VERSION"
+
+    if [[ ! -f "$DOCKERFILE" ]]; then
+        echo "[ERROR] $DOCKERFILE not found. Please run this script from the PyCuSFM root directory."
+        echo "[ERROR] Available Dockerfiles should be: docker/DockerFile.dev_cuda12, docker/DockerFile.dev_cuda13"
         exit 1
     fi
-    
-    if docker build -f docker/DockerFile.dev -t "$DOCKER_IMAGE" .; then
+
+    if docker build -f "$DOCKERFILE" -t "$DOCKER_IMAGE" .; then
         echo "[SUCCESS] Docker image built successfully: $DOCKER_IMAGE"
     else
         echo "[ERROR] Failed to build Docker image"
@@ -90,7 +108,7 @@ build_docker_image() {
 # Function to run Docker container
 run_docker_container() {
     echo "[INFO] Starting Docker container..."
-    
+
     # Prepare docker run command as array
     DOCKER_CMD=(
         "docker" "run" "-it" "--rm"
@@ -108,7 +126,7 @@ run_docker_container() {
         "${DOCKER_CMD[@]}" bash -c "
             # Add ~/.local/bin to PATH for pip user installations
             export PATH=\"\$HOME/.local/bin:\$PATH\"
-            
+
             echo '[INFO] Installing PyCuSFM in docker environment...'
             if pip3 install --editable .; then
                 echo '[SUCCESS] PyCuSFM installed successfully'
@@ -132,6 +150,7 @@ run_docker_container() {
 
 # Main execution flow
 echo "[INFO] Configuration:"
+echo "  CUDA version: $CUDA_VERSION"
 echo "  Build Docker image: $BUILD_DOCKER"
 echo "  Install PyCuSFM: $INSTALL_PYCUSFM"
 echo "  Docker image: $DOCKER_IMAGE"
@@ -145,8 +164,8 @@ fi
 # Step 2: Check if Docker image exists
 if ! docker image inspect "$DOCKER_IMAGE" &> /dev/null; then
     echo "[ERROR] Docker image '$DOCKER_IMAGE' not found."
-    echo "[INFO] Please build the image first using: $0 --build_docker"
-    echo "[INFO] Or build manually with: docker build -f docker/DockerFile.dev -t $DOCKER_IMAGE ."
+    echo "[INFO] Please build the image first using: $0 --cuda $CUDA_VERSION --build_docker"
+    echo "[INFO] Or build manually with: docker build -f docker/DockerFile.dev_$CUDA_VERSION -t $DOCKER_IMAGE ."
     exit 1
 fi
 

@@ -306,6 +306,12 @@ Control which steps to run using `--steps_to_run` or skip specific steps with `-
 - `--feature_type=[aliked,sift,superpoint]` (default: aliked)
 - `--multi_track_input`: Process multiple image sequences
 
+**Geometry-based Keyframe Selection:**
+- `--min_inter_frame_distance`: Minimum translational distance (in meters) between consecutive keyframes for geometry-based selection (default: 0.5)
+- `--min_inter_frame_rotation_degrees`: Minimum rotational change (in degrees) between consecutive keyframes for geometry-based selection (default: 5)
+
+These parameters filter keyframes based on geometric criteria - only frames that exceed the specified translation or rotation thresholds relative to the previous keyframe will be selected.
+
 #### 2. Dictionary Construction (`<cusfm_base_dir>/cuvgl_map`)
 
 - `--skip_vocab_generator --cuvgl_dir=<cuvgl_dir>`: Use prebuilt vocabulary instead of generating a new one
@@ -487,8 +493,8 @@ This section demonstrates how to run stereo visual odometry on the KITTI dataset
    ```
 
 3. **frames_meta.json File Setup**
-   
-    KITTI datasets don't include the `frames_meta.json` file required by PyCuSFM. 
+
+    KITTI datasets don't include the `frames_meta.json` file required by PyCuSFM.
     The provided script can generate the `frames_meta.json` file from the KITTI dataset:
 
     ```bash

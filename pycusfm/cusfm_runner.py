@@ -72,6 +72,7 @@ class CuSFMRunner:
             override_frames_meta_file="",
             cuvgl_dir="",
             optimize_extrinsics=False,
+            optimize_intrinsics=False,
             ba_frame_type=None,
             min_inter_frame_distance=0.5,
             min_inter_frame_rotation_degrees=5,
@@ -115,6 +116,7 @@ class CuSFMRunner:
         self.override_frames_meta_file = override_frames_meta_file
         self.dry_run = dry_run
         self.optimize_extrinsics = optimize_extrinsics
+        self.optimize_intrinsics = optimize_intrinsics
         self.ba_frame_type = ba_frame_type
         self.multi_track_input = multi_track_input
         self.downsampling_matches = downsampling_matches
@@ -151,12 +153,7 @@ class CuSFMRunner:
         self.association_dir = os.path.join(
             self.cusfm_base_dir, kASSOCIATIONS_DIR)
         self.debug_interval = debug_interval
-        if feature_type == "superpoint":
-            self.model_dir = os.path.join(model_dir, "superpoint_lightglue")
-        elif feature_type == "aliked":
-            self.model_dir = os.path.join(model_dir, "aliked_lightglue")
-        else:
-            self.model_dir = "."
+        self.model_dir = model_dir
 
         # single track data association mode is replaced by  incremental pose_graph because it is better
         self.anchor_track = anchor_track
@@ -164,6 +161,7 @@ class CuSFMRunner:
         # Enforce data-association only when multi-track is enabled
         if self.multi_track_input:
             self.global_localize_succ_sample = global_localize_succ_sample
+            self.skip_data_association = False
 
         self.runner = CommandRunner(
             binary_dir=binary_dir,
@@ -174,10 +172,7 @@ class CuSFMRunner:
         self.logger = logging.getLogger('cusfm_runner')
 
     def run_cuvslam(
-            self,
-            input_dir,
-            cuvslam_output_dir,
-            override_frames_meta_file=""):
+            self, input_dir, cuvslam_output_dir, override_frames_meta_file=""):
         """Run CUVSLAM processing to generate pose estimates.
 
         Args:
@@ -261,10 +256,7 @@ class CuSFMRunner:
         return output_keyframe_metadata_file
 
     def extract_features(
-            self,
-            input_dir,
-            keyframe_dir,
-            override_frames_meta_file=""):
+            self, input_dir, keyframe_dir, override_frames_meta_file=""):
         if not self.skip_feature_extractor:
             self.logger.info("Extracting features ...")
             self.runner.remove_directory(keyframe_dir)
@@ -456,14 +448,12 @@ class CuSFMRunner:
         track_dirs = list_subdirectories(self.input_dir)
 
         for track_name, track_dir in track_dirs:
-            track_keyframe_dir = os.path.join(
-                self.keyframe_dir, track_name)
+            track_keyframe_dir = os.path.join(self.keyframe_dir, track_name)
             self.logger.info(
                 f"Processing track: {track_dir}, keyframe_dir: {track_keyframe_dir}"
             )
 
-            self.extract_features(
-                track_dir, track_keyframe_dir)
+            self.extract_features(track_dir, track_keyframe_dir)
 
         self.keyframe_aggregation(self.keyframe_dir)
 
@@ -483,13 +473,11 @@ class CuSFMRunner:
                 f"anchor track is not set, will automatically set to {self.anchor_track}"
             )
 
-        cuvslam_dir = os.path.join(
-            self.cusfm_base_dir, 'cuvslam_multi_track')
+        cuvslam_dir = os.path.join(self.cusfm_base_dir, 'cuvslam_multi_track')
         self.runner.remove_directory(cuvslam_dir)
         self.runner.ensure_directory_exists(cuvslam_dir)
 
-        anchor_cuvgl_dir = os.path.join(
-            self.cusfm_base_dir, 'anchor_cuvgl')
+        anchor_cuvgl_dir = os.path.join(self.cusfm_base_dir, 'anchor_cuvgl')
         self.runner.remove_directory(anchor_cuvgl_dir)
         self.runner.ensure_directory_exists(anchor_cuvgl_dir)
 
@@ -501,14 +489,12 @@ class CuSFMRunner:
         for track_name, track_dir in track_dirs:
             if track_name == self.anchor_track:
                 continue
-            track_keyframe_dir = os.path.join(
-                self.keyframe_dir, track_name)
+            track_keyframe_dir = os.path.join(self.keyframe_dir, track_name)
             self.logger.info(
                 f"Processing track: {track_dir}, keyframe_dir: {track_keyframe_dir}"
             )
 
-            track_cuvslam_output_dir = os.path.join(
-                cuvslam_dir, track_name)
+            track_cuvslam_output_dir = os.path.join(cuvslam_dir, track_name)
             self.runner.remove_directory(track_cuvslam_output_dir)
             self.runner.ensure_directory_exists(track_cuvslam_output_dir)
 
@@ -528,16 +514,14 @@ class CuSFMRunner:
 
         self.keyframe_aggregation(self.keyframe_dir)
 
-        self.logger.info(
-            "\033[0;32m Frames Aggregating Finished ...\033[0m")
+        self.logger.info("\033[0;32m Frames Aggregating Finished ...\033[0m")
 
     def keyframe_aggregation(self, keyframe_dir):
         keyframe_aggregation_logs_file = os.path.join(
             keyframe_dir, 'keyframe_aggregation_main.txt')
         self.runner.run_binary(
-            'keyframe_aggregation_main', [
-                "--keyframe_directory", keyframe_dir
-            ],
+            'keyframe_aggregation_main',
+            ["--keyframe_directory", keyframe_dir],
             logs_file_path=keyframe_aggregation_logs_file)
 
     def generate_bow(self, keyframe_dir, cuvgl_dir, voc_dir):
@@ -568,6 +552,13 @@ class CuSFMRunner:
                         'image_retrieval_config.pb.txt')
                 ],
                 logs_file_path=bow_index_logs_file)
+
+            keyframe_link = os.path.join(cuvgl_dir, "keyframes")
+            if os.path.islink(keyframe_link) or os.path.isfile(keyframe_link):
+                os.unlink(keyframe_link)
+
+            os.symlink(keyframe_dir, keyframe_link)
+
             self.logger.info("\033[0;32m BoW Build Finished ...\033[0m")
 
     def generate_associations(self):
@@ -578,13 +569,19 @@ class CuSFMRunner:
             self.association_dir, 'associations_main.txt')
 
         cmd = [
-            'generate_association_main', "--keyframe_dir", self.keyframe_dir,
-            "--gl_map_dir", self.cuvgl_dir, "--output_dir",
-            self.association_dir, "--association_worker_config",
+            'generate_association_main',
+            "--keyframe_dir",
+            self.keyframe_dir,
+            "--gl_map_dir",
+            self.cuvgl_dir,
+            "--output_dir",
+            self.association_dir,
+            "--association_worker_config",
             self.runner.get_config_path('association_config.pb.txt'),
             "--matching_worker_config",
             self.runner.get_config_path('matching_task_worker_config.pb.txt'),
-            "--model_dir", self.model_dir,
+            "--model_dir",
+            self.model_dir,
         ]
 
         if self.enable_debug:
@@ -815,6 +812,10 @@ class CuSFMRunner:
                 cmd.extend(
                     [f'--optimize_extrinsics={self.optimize_extrinsics}'])
 
+            if self.optimize_intrinsics:
+                cmd.extend(
+                    [f'--optimize_intrinsics={self.optimize_intrinsics}'])
+
             if self.anchor_track:
                 cmd.extend(["--fixed_track_name", self.anchor_track])
 
@@ -847,6 +848,7 @@ class CuSFMRunner:
             '--output_map_dir',
             self.map_dir,
             f'--optimize_extrinsics={self.optimize_extrinsics}',
+            f'--optimize_intrinsics={self.optimize_intrinsics}',
             f'--ba_frame_type={self.ba_frame_type}',
             f'--raw_data_dir={self.input_dir}',
             f'--use_vehicle_trajectory={self.use_vehicle_trajectory}',
@@ -880,6 +882,21 @@ class CuSFMRunner:
                 ["--map_dir", self.map_dir, "--output_dir", self.open_map_dir],
                 logs_file_path=logs_file)
             self.logger.info("\033[0;32m Map Conversion Finished ...\033[0m")
+
+    def add_bow_for_map_localizer(self, kpmap, cuvgl_map_dir):
+        kpmap_voc_link = os.path.join(kpmap, "vocabulary")
+        voc_dir = os.path.join(cuvgl_map_dir, "vocabulary")
+        if os.path.islink(kpmap_voc_link) or os.path.isfile(kpmap_voc_link):
+            os.unlink(kpmap_voc_link)
+
+        os.symlink(voc_dir, kpmap_voc_link)
+
+        kpmap_index_link = os.path.join(kpmap, "bow_index.pb")
+        index_file = os.path.join(cuvgl_map_dir, "bow_index.pb")
+        if os.path.islink(kpmap_index_link) or os.path.isfile(kpmap_index_link):
+            os.unlink(kpmap_index_link)
+
+        os.symlink(index_file, kpmap_index_link)
 
     def convert_poses(
             self,
@@ -969,6 +986,9 @@ class CuSFMRunner:
 
         self.match_features()
         self.map_keypoints()
+
+        self.add_bow_for_map_localizer(self.map_dir, self.cuvgl_dir)
+
         self.convert_map()
         self.convert_poses(
             export_pose_in_vehicle_frame=self.export_pose_in_vehicle_frame)
@@ -1004,6 +1024,7 @@ def get_default_cusfm_params(package_path: Path):
         'override_frames_meta_file': '',  # Default empty string
         'dry_run': False,
         'optimize_extrinsics': False,
+        'optimize_intrinsics': False,
         'multi_track_input': False,
         'use_roll_shutter_correction': False,
         'sample_sync_threshold_microseconds': 100,  # Default value
@@ -1018,7 +1039,7 @@ def get_default_cusfm_params(package_path: Path):
         'global_localize_succ_sample': 10,
         'use_cuvslam_slam_pose': True,
         'skip_track_global_transform': False,
-        'skip_data_association': False
+        'skip_data_association': True
     }
 
 

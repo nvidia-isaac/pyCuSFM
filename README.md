@@ -18,6 +18,15 @@ This repository provides the official python implementation of [cuSFM](https://a
 
 Refer to [paper](https://arxiv.org/abs/2510.15271) for technical details and benchmark results about cuSFM.
 
+## Updates
+
+**Version 0.1.1** - Latest Release
+- Added build for CUDA 13 that support Blackwell GPUs
+- Added CUDA 13 docker file
+
+**Version 0.1.0** - Initial Release
+- Initial release of everything
+
 ## COLMAP vs cuSFM
 
 | Feature | COLMAP | cuSFM |
@@ -31,17 +40,42 @@ Refer to [paper](https://arxiv.org/abs/2510.15271) for technical details and ben
 | **Camera-to-Camera Extrinsic Optimization** | Supported | Supported |
 | **Localization** | Supported | Supported |
 
+### Trajectory Initialization Requirements
+
+The need for initial trajectory guess depends on your input data type:
+
+| Input Type | Initial Trajectory Required | Notes |
+|------------|----------------------------|-------|
+| **Sequential Stereo Images** | No | cuVSLAM is integrated to automatically compute initial poses |
+| **Sequential Monocular Images** | Yes | Initial guess poses must be provided in `camera_to_world` field |
+| **Unordered Images** | Yes | Initial guess poses must be provided in `camera_to_world` field |
+
+**How to provide initial poses:** Populate the `camera_to_world` field in the `frames_meta.json` file with 6DOF camera poses. See the [tutorial](docs/tutorial.md) for detailed instructions on pose formats and types.
+
+> **Note:** Support for un-posed sequential monocular images will be added in future release.
 
 ## Installation
 
 ### Prerequisites
 
-Before installation, ensure your system meets the following requirements:
+Before installation, ensure your system meets the following requirements based on your CUDA version:
+
+#### Common Requirements
 - **Operating System:** Ubuntu 24.04 LTS (recommended)
-- **NVIDIA Driver:** Version 560 or higher
-- **CUDA Toolkit:** 12.6 or compatible version
 - **Python:** Version 3.8 or higher
 - **Git LFS:** For downloading large model files
+
+#### CUDA-Specific Requirements
+
+**For CUDA 12:**
+- **NVIDIA Driver:** Version 525 or higher
+- **CUDA Toolkit:** 12.0 or compatible version
+
+**For CUDA 13:**
+- **NVIDIA Driver:** Version 580 or higher
+- **CUDA Toolkit:** 13.0 or compatible version
+
+> **Note:** Check your current driver version with `nvidia-smi` and CUDA version with `nvcc --version` before proceeding.
 
 ### Download Repository
 
@@ -59,6 +93,25 @@ Clone the repository and navigate to the project directory:
 git clone https://github.com/nvidia-isaac/PyCuSFM
 cd pycusfm
 ```
+
+### Repository Setup
+
+**Important:** Before proceeding with installation, you must configure the repo based on your CUDA version on system:
+
+```bash
+# For CUDA 12 systems
+./setup.bash cuda12
+
+# For CUDA 13 systems
+./setup.bash cuda13
+```
+
+This script creates symbolic links to the appropriate CUDA-specific binaries and libraries in the `pycusfm/` directory. The setup is required before any installation or usage.
+
+**Important Notes:**
+- Run this setup script immediately after cloning the repository
+- Verify your CUDA version with `nvcc --version` before running the setup script
+- The script will automatically clean up previous symlinks and create new ones for the selected CUDA version
 
 Choose one of the following installation methods based on your preference:
 
@@ -125,18 +178,32 @@ source ~/.bashrc
 Use the provided Docker runner script for automated container management:
 
 ```bash
-# Build Docker image and run container with PyCuSFM installation
+# Build Docker image and run container with PyCuSFM installation (CUDA 13 - default)
 ./run_in_docker.sh --build_docker --install
+
+# Build Docker image and run container with PyCuSFM installation (CUDA 12)
+./run_in_docker.sh --cuda cuda12 --build_docker --install
 ```
 
+**Note:** When using Docker, the `--cuda` option automatically selects the appropriate Docker image and environment. You don't need to run the `setup.bash` script separately as the Docker container comes pre-configured with the selected CUDA version.
+
 **Script Options:**
-- `./run_in_docker.sh` - Just run Docker container (image must exist)
-- `./run_in_docker.sh --build_docker` - Build image then run container
-- `./run_in_docker.sh --install` - Run container and install PyCuSFM
-- `./run_in_docker.sh --build_docker --install` - Build image, run container, and install PyCuSFM
+- `--cuda <version>` - Specify CUDA version (cuda12 or cuda13, default: cuda13)
+- `--build_docker` - Build Docker image before running container
+- `--install` - Install PyCuSFM inside the container after starting
+
+**Examples:**
+- `./run_in_docker.sh` - Run container with CUDA 13 (default)
+- `./run_in_docker.sh --cuda cuda12` - Run container with CUDA 12
+- `./run_in_docker.sh --cuda cuda13 --build_docker` - Build CUDA 13 image then run container
+- `./run_in_docker.sh --cuda cuda12 --install` - Run CUDA 12 container and install PyCuSFM
 
 
-**Compatibility Note:** The base image is `nvcr.io/nvidia/tensorrt:24.12-py3`. Check support matrix [here](https://docs.nvidia.com/deeplearning/frameworks/support-matrix/index.html#framework-matrix-2024).
+**Compatibility Note:**
+- CUDA 13: Base image `nvcr.io/nvidia/tensorrt:25.09-py3`
+- CUDA 12: Base image `nvcr.io/nvidia/tensorrt:24.12-py3`
+
+Check support matrix [here](https://docs.nvidia.com/deeplearning/frameworks/support-matrix/index.html#framework-matrix-2025__section_zz3_hdz_m1c).
 
 </details>
 

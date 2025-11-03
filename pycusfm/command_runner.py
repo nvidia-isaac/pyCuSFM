@@ -134,8 +134,6 @@ class CommandRunner:
             else:
                 env['LD_LIBRARY_PATH'] = tensorrt_libs
 
-        print("using LD_LIBRARY_PATH: ", env['LD_LIBRARY_PATH'])
-
     def run_command(
             self,
             command_name,
@@ -258,8 +256,7 @@ class CommandRunner:
         # Log runtime if enabled and not dry_run
         if self.runtime_log_dir and not self.dry_run:
             os.makedirs(self.runtime_log_dir, exist_ok=True)
-            runtime_csv_path = os.path.join(
-                self.runtime_log_dir, "runtime.csv")
+            runtime_csv_path = os.path.join(self.runtime_log_dir, "runtime.csv")
             command = f"{binary_name} {' '.join(args)}"
 
             # Use lock to prevent race conditions when multiple threads write to the same CSV file
@@ -373,8 +370,7 @@ class CommandRunner:
             print(f"Removed directory {dir_path}")
 
     def run_binaries_parallel(self, commands, max_workers=4):
-        print(
-            f"Starting parallel execution of {len(commands)} commands with max_workers={max_workers}")
+        print(f"Starting parallel execution of {len(commands)} commands with max_workers={max_workers}")
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [
