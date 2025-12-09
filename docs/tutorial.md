@@ -330,6 +330,20 @@ These parameters filter keyframes based on geometric criteria - only frames that
 
 Converts poses and sparse 3D maps to COLMAP format for visualization.
 
+- `--export_binary_colmap_files`: Export COLMAP data in binary format (`.bin`) instead of text format (`.txt`)
+  - Default: Text format (`.txt` files)
+  - Binary format is more compact and faster to load in COLMAP GUI
+  - Example: `cusfm_cli --input_dir data/input --cusfm_base_dir results/output --export_binary_colmap_files`
+
+**Output Files:**
+- Text format (default): `cameras.txt`, `images.txt`, `points3D.txt`
+- Binary format (with `--export_binary_colmap_files`): `cameras.bin`, `images.bin`, `points3D.bin`
+
+**Camera Model Support:**
+- `PINHOLE`: Exports as COLMAP PINHOLE model (fx, fy, cx, cy)
+- `DISTORTED_PINHOLE`: Exports as COLMAP FULL_OPENCV model (fx, fy, cx, cy, k1-k6, p1-p2)
+- `FTHETA_WINDSHIELD`: Falls back to PINHOLE model if projection matrix available
+
 </details>
 
 ### Pre-compiling Model .engine Files

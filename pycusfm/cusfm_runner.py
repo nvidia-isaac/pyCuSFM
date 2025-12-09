@@ -95,8 +95,11 @@ class CuSFMRunner:
             global_localize_succ_sample=10,
             use_cuvslam_slam_pose=True,
             skip_track_global_transform=False,
-            skip_data_association=False):
+            skip_data_association=False,
+            export_binary_colmap_files=False,
+            av_data=False):
 
+        self.av_data = av_data
         self.input_dir = input_dir
         self.cusfm_base_dir = cusfm_base_dir
         # False will use odom pose
@@ -111,6 +114,7 @@ class CuSFMRunner:
         self.skip_mapper = skip_mapper
         self.skip_map_convertor = skip_map_convertor
         self.skip_cuvslam = skip_cuvslam
+        self.export_binary_colmap_files = export_binary_colmap_files
         self.enable_debug = enable_debug
         self.num_threads = num_threads
         self.override_frames_meta_file = override_frames_meta_file
@@ -816,7 +820,8 @@ class CuSFMRunner:
                 cmd.extend(
                     [f'--optimize_intrinsics={self.optimize_intrinsics}'])
 
-            if self.anchor_track:
+            # this is only for AV dataset
+            if self.anchor_track and self.av_data:
                 cmd.extend(["--fixed_track_name", self.anchor_track])
 
             if self.enable_debug:
@@ -877,10 +882,15 @@ class CuSFMRunner:
             self.runner.ensure_directory_exists(self.open_map_dir)
 
             logs_file = os.path.join(self.open_map_dir, 'kpmap_to_colmap.txt')
+
+            cmd_args = [
+                "--map_dir", self.map_dir, "--output_dir", self.open_map_dir
+            ]
+            if self.export_binary_colmap_files:
+                cmd_args.append("--binary")
+
             self.runner.run_binary(
-                'kpmap_to_colmap',
-                ["--map_dir", self.map_dir, "--output_dir", self.open_map_dir],
-                logs_file_path=logs_file)
+                'kpmap_to_colmap', cmd_args, logs_file_path=logs_file)
             self.logger.info("\033[0;32m Map Conversion Finished ...\033[0m")
 
     def add_bow_for_map_localizer(self, kpmap, cuvgl_map_dir):
@@ -893,7 +903,8 @@ class CuSFMRunner:
 
         kpmap_index_link = os.path.join(kpmap, "bow_index.pb")
         index_file = os.path.join(cuvgl_map_dir, "bow_index.pb")
-        if os.path.islink(kpmap_index_link) or os.path.isfile(kpmap_index_link):
+        if os.path.islink(kpmap_index_link) or os.path.isfile(
+                kpmap_index_link):
             os.unlink(kpmap_index_link)
 
         os.symlink(index_file, kpmap_index_link)
@@ -953,13 +964,36 @@ class CuSFMRunner:
             pose_conversion_cmd[1:],
             logs_file_path=logs_file)
 
+        if self.multi_track_input:
+            track_dirs = list_subdirectories(self.input_dir)
+            output_meta_dir = os.path.join(self.cusfm_base_dir, 'output_meta')
+            output_tum_pose_file = os.path.join(
+                output_pose_dir, 'merged_pose_file.tum')
+            for track_name, track_dir in track_dirs:
+                track_keyframe_dir = os.path.join(
+                    self.keyframe_dir, track_name)
+                track_output_dir = os.path.join(output_meta_dir, track_name)
+                self.runner.ensure_directory_exists(track_output_dir)
+                self.runner.run_binary(
+                    'update_keyframe_pose_main', [
+                        "--input_file",
+                        os.path.join(track_dir, kFRAME_META_FILE),
+                        "--output_file",
+                        os.path.join(track_output_dir, kFRAME_META_FILE),
+                        "--tum_pose_file",
+                        output_tum_pose_file,
+                    ],
+                    logs_file_path=os.path.join(
+                        output_pose_dir, 'update_keyframe_pose_main.txt'))
+
     def run_all(self):
 
         if self.multi_track_input:
             # For data with a stereo configuration in Isaac, we need to use cuvslam and stereo cameras to solve for relative poses.
             # However, this strategy cannot be applied to AV data.
-            if not self.skip_cuvslam:
-                self.multi_track_keyframe_for_isaac()
+            if not self.av_data:
+                if not self.skip_feature_extractor:
+                    self.multi_track_keyframe_for_isaac()
             else:
                 self.multi_track_keyframe_for_av()
         else:
@@ -1039,7 +1073,9 @@ def get_default_cusfm_params(package_path: Path):
         'global_localize_succ_sample': 10,
         'use_cuvslam_slam_pose': True,
         'skip_track_global_transform': False,
-        'skip_data_association': True
+        'skip_data_association': True,
+        'export_binary_colmap_files': False,  # Default is text format (.txt)
+        'av_data': False
     }
 
 
@@ -1064,7 +1100,8 @@ def get_av_data_cusfm_params(package_path: Path):
             'skip_pose_graph': True,
             'use_roll_shutter_correction': True,
             'skip_data_association': True,
-            'skip_cuvslam': True
+            'skip_cuvslam': True,
+            'av_data': True
         })
 
     return params

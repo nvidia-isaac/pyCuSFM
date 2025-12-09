@@ -74,7 +74,8 @@ def main():
     parser.add_argument('--config_dir', default=None, help="Config directory")
     parser.add_argument('--feature_type', default=None, help='Feature type')
     parser.add_argument('--mask_dir', default=None, help='Mask directory')
-    parser.add_argument('--model_dir', default=None, help='Model directory for feature extraction')
+    parser.add_argument('--model_dir', default=None,
+                        help='Model directory for feature extraction')
     parser.add_argument(
         '--steps_to_run',
         nargs='+',
@@ -151,6 +152,10 @@ def main():
         parser,
         'skip_data_association',
         help='Whether to use data association or not')
+    add_bool_argument(
+        parser,
+        'export_binary_colmap_files',
+        help='Export COLMAP data in binary format (.bin) instead of text format (.txt)')
     parser.add_argument(
         "--ba_frame_type",
         type=str,
@@ -205,8 +210,7 @@ def main():
     parser.add_argument(
         '--feature_matching_batch_size',
         type=int,
-        help=
-        'Batch size for GPU-accelerated feature matching. If > 0, uses GPU batch matching'
+        help='Batch size for GPU-accelerated feature matching. If > 0, uses GPU batch matching'
     )
     parser.add_argument(
         '--max_keypoints_num',
@@ -307,7 +311,8 @@ def main():
         global_localize_succ_sample=args.global_localize_succ_sample,
         use_cuvslam_slam_pose=args.use_cuvslam_slam_pose,
         skip_track_global_transform=args.skip_track_global_transform,
-        skip_data_association=args.skip_data_association)
+        skip_data_association=args.skip_data_association,
+        export_binary_colmap_files=args.export_binary_colmap_files)
 
     # Validate parameters
     if cusfm_runner.do_rolling_shutter_correction and (
