@@ -140,7 +140,7 @@ $$
 Combined radial-rational factor:
 
 $$
-\text{radial\_rational} = \frac{\text{radial}}{\text{rational}}
+\text{radial\\_rational} = \frac{\text{radial}}{\text{rational}}
 $$
 
 Tangential distortion:
@@ -156,11 +156,11 @@ $$
 **Step 3: Compute distorted coordinates**
 
 $$
-x' = x \cdot \text{radial\_rational} + \Delta x_t
+x' = x \cdot \text{radial\\_rational} + \Delta x_t
 $$
 
 $$
-y' = y \cdot \text{radial\_rational} + \Delta y_t
+y' = y \cdot \text{radial\\_rational} + \Delta y_t
 $$
 
 **Step 4: Project to pixel coordinates**
@@ -680,7 +680,7 @@ For a frame with `num_rows` rows and total readout time `T`:
 - Row `r` is captured at time:
 
 $$
-t(r) = t_{ref} - T \cdot \frac{(\text{num\_rows} - 1 - r)}{\text{num\_rows} - 1}
+t(r) = t_{ref} - T \cdot \frac{(\text{num\\_rows} - 1 - r)}{\text{num\\_rows} - 1}
 $$
 
 The correction computes a per-row rigid transformation $T_r$ that maps points from the reference camera frame to the camera frame at row $r$'s capture time.
