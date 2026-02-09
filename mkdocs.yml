@@ -1,0 +1,39 @@
+site_name: PyCuSFM
+site_description: Cuda Accelerated Structure from Motion
+
+site_url: https://nvidia-isaac.github.io/pyCuSFM
+
+theme:
+  name: material
+  language: en
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+docs_dir: docs
+strict: true
+
+
+markdown_extensions:
+  - pymdownx.arithmatex:
+      generic: true
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+
+nav:
+  - Home: index.md
+  - Tutorial: tutorial.md
+  - Camera Models: camera.md
+  - Auxiliary Tools: README_auxiliary_tools.md

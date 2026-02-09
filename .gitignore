@@ -14,3 +14,5 @@ results/*
 .local/*
 pycusfm/bin
 pycusfm/lib
+# MkDocs build output
+site/

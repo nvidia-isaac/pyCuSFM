@@ -1,0 +1,47 @@
+# Build docs with MkDocs Material (math support) and deploy to GitHub Pages.
+# After first run: Repo → Settings → Pages → Source: "GitHub Actions".
+name: Deploy docs to GitHub Pages
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install MkDocs and extensions
+        run: pip install "mkdocs-material>=9.0" "pymdown-extensions>=10.0"
+
+      - name: Build docs
+        run: mkdocs build --strict
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: github-pages
+    steps:
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
