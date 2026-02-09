@@ -74,8 +74,10 @@ def main():
     parser.add_argument('--config_dir', default=None, help="Config directory")
     parser.add_argument('--feature_type', default=None, help='Feature type')
     parser.add_argument('--mask_dir', default=None, help='Mask directory')
-    parser.add_argument('--model_dir', default=None,
-                        help='Model directory for feature extraction')
+    parser.add_argument(
+        '--model_dir',
+        default=None,
+        help='Model directory for feature extraction')
     parser.add_argument(
         '--steps_to_run',
         nargs='+',
@@ -155,7 +157,13 @@ def main():
     add_bool_argument(
         parser,
         'export_binary_colmap_files',
-        help='Export COLMAP data in binary format (.bin) instead of text format (.txt)')
+        help=
+        'Export COLMAP data in binary format (.bin) instead of text format (.txt)'
+    )
+    add_bool_argument(
+        parser,
+        'output_rgb',
+        help='Extract and output RGB colors for 3D map points from raw images')
     parser.add_argument(
         "--ba_frame_type",
         type=str,
@@ -166,9 +174,7 @@ def main():
         "If set to config, we will use the ba_frame_type provided in the config file."
     )
     parser.add_argument(
-        '--num_threads',
-        type=int,
-        help='Number of available threads')
+        '--num_threads', type=int, help='Number of available threads')
     parser.add_argument(
         '--override_frames_meta_file',
         default=None,
@@ -210,7 +216,8 @@ def main():
     parser.add_argument(
         '--feature_matching_batch_size',
         type=int,
-        help='Batch size for GPU-accelerated feature matching. If > 0, uses GPU batch matching'
+        help=
+        'Batch size for GPU-accelerated feature matching. If > 0, uses GPU batch matching'
     )
     parser.add_argument(
         '--max_keypoints_num',
@@ -225,7 +232,9 @@ def main():
     parser.add_argument(
         '--anchor_track',
         type=str,
-        help='Specify the name of the folder for the track(s) to be fixed in multi-track scenarios.')
+        help=
+        'Specify the name of the folder for the track(s) to be fixed in multi-track scenarios.'
+    )
     parser.add_argument(
         '--global_localize_succ_sample',
         type=int,
@@ -240,6 +249,23 @@ def main():
         "--previous_raw_image_dir",
         type=str,
         help="If built map raw image folder is provided, using debug mode.")
+    parser.add_argument(
+        "--cuvslam_config_file",
+        type=str,
+        default=None,
+        help="Path to cuVSLAM configuration file (YAML)")
+
+    parser.add_argument(
+        "--config_set",
+        type=str,
+        default="isaac",
+        help="av,isaac,rgbd,backpack.")
+
+    parser.add_argument(
+        '--rgbd_mode',
+        type=int,
+        help=(
+            'Specifies the RGBD mode 3 for AMAZON, 2 for STEREO, 1 for ARKID'))
 
     args = parser.parse_args()
 
@@ -265,9 +291,12 @@ def main():
             "--optimize_extrinsics is only supported for --ba_frame_type=vehicle_rig"
         )
 
+    if args.av_data:
+        args.config_set = 'av'
+
     # Create runner using the new helper function
     cusfm_runner = create_cusfm_runner(
-        av_data=args.av_data,
+        config_set=args.config_set,
         input_dir=args.input_dir,
         cusfm_base_dir=args.cusfm_base_dir,
         binary_dir=args.binary_dir,
@@ -312,7 +341,10 @@ def main():
         use_cuvslam_slam_pose=args.use_cuvslam_slam_pose,
         skip_track_global_transform=args.skip_track_global_transform,
         skip_data_association=args.skip_data_association,
-        export_binary_colmap_files=args.export_binary_colmap_files)
+        export_binary_colmap_files=args.export_binary_colmap_files,
+        rgbd_mode=args.rgbd_mode,
+        cuvslam_config_file=args.cuvslam_config_file,
+        output_rgb=args.output_rgb)
 
     # Validate parameters
     if cusfm_runner.do_rolling_shutter_correction and (

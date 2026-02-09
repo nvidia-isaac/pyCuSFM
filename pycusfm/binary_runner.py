@@ -9,6 +9,12 @@ import sys
 from pathlib import Path
 from .command_runner import CommandRunner
 
+try:
+    from .runfiles_helper import get_binary_dir, get_config_dir
+    HAVE_RUNFILES_HELPER = True
+except ImportError:
+    HAVE_RUNFILES_HELPER = False
+
 
 def setup_env(package_path=None):
     if package_path is None:
@@ -29,9 +35,20 @@ def setup_env(package_path=None):
 
 
 def binary_runner(binary_name, args, package_path=None):
-    package_path = setup_env(package_path)
-    binary_dir = os.path.join(package_path, "bin")
-    config_dir = os.path.join(package_path, "configs/isaac")
+    # Try to use Bazel runfiles helper first
+    if HAVE_RUNFILES_HELPER:
+        try:
+            binary_dir = get_binary_dir()
+            config_dir = get_config_dir()
+        except Exception:
+            # Fall back to traditional method if runfiles detection fails
+            package_path = setup_env(package_path)
+            binary_dir = os.path.join(package_path, "bin")
+            config_dir = os.path.join(package_path, "configs/isaac")
+    else:
+        package_path = setup_env(package_path)
+        binary_dir = os.path.join(package_path, "bin")
+        config_dir = os.path.join(package_path, "configs/isaac")
     dry_run = False
     add_tensorrt_path = True
 

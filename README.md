@@ -20,7 +20,19 @@ Refer to [paper](https://arxiv.org/abs/2510.15271) for technical details and ben
 
 ## Updates
 
-**Version 0.1.1** - Latest Release
+**Version 0.1.3** - Latest Release
+- Added keyframe metadata generator to simplify `frames_meta.json` creation ([Tool docs](docs/README_auxiliary_tools.md#tool-5-keyframe-metadata-generator))
+- Populated RGB values in the output sparse point cloud with `--output_rgb` ([Mapping docs](docs/tutorial.md#5-mapping-cusfm_base_dirkpmap))
+- Added OPENCV_FISHEYE camera model support and [camera models](docs/camera.md#opencv_fisheye) doc
+- Added [rolling shutter](docs/camera.md#rolling-shutter-correction) guidance
+
+**Version 0.1.2**
+- Added support for COLMAP binary format (.bin) output with `--export_binary_colmap_files` flag
+- Added distortion parameter output support for COLMAP FULL_OPENCV camera model
+
+For more details, see [tutorial](docs/tutorial.md#command-line-interface) - Step-Specific Options → Step 6: COLMAP Conversion.
+
+**Version 0.1.1**
 - Added build for CUDA 13 that support Blackwell GPUs
 - Added CUDA 13 docker file
 

@@ -23,6 +23,7 @@ dependencies = [
     "numpy>=1.18.0",
     "setuptools",
     "tensorrt-cu12>=10.3.0.26",
+    "PyYAML",
     "Pillow",
 ]
 

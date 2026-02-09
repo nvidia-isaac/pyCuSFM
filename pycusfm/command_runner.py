@@ -370,7 +370,8 @@ class CommandRunner:
             print(f"Removed directory {dir_path}")
 
     def run_binaries_parallel(self, commands, max_workers=4):
-        print(f"Starting parallel execution of {len(commands)} commands with max_workers={max_workers}")
+        print(
+            f"Starting parallel execution of {len(commands)} commands with max_workers={max_workers}")
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [

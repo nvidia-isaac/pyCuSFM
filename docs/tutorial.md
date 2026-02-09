@@ -18,6 +18,8 @@ Your input data folder should contain:
 - **Image files**: Camera images in supported formats (JPEG, PNG, etc.)
 - **`frames_meta.json`**: Metadata file following the `KeyframesMetadataCollection` protobuf format
 
+For a cleaner input format, you can generate `frames_meta.json` from `poses.csv` or stereo image folders using [`pycusfm/generate_frame_meta.py`](README_auxiliary_tools.md#tool-5-keyframe-metadata-generator).
+
 ### frames_meta.json Structure
 
 The `frames_meta.json` file is the core metadata file that follows the `KeyframesMetadataCollection` protobuf definition. It contains:
@@ -28,7 +30,6 @@ The `frames_meta.json` file is the core metadata file that follows the `Keyframe
 - **`keyframes_metadata`**: Array of keyframe metadata objects
 - **`initial_pose_type`**: Pose interpretation type (EGO_MOTION, ALIGNMENT, GPS_IMU, MAP_POSE, SESSION_EGO_MOTION)
 - **`camera_params_id_to_camera_params`**: Map of camera parameter IDs to camera calibration data
-- **`camera_params_id_to_session_name`**: Map of camera parameter IDs to session names
 
 </details>
 
@@ -41,6 +42,7 @@ The `frames_meta.json` file is the core metadata file that follows the `Keyframe
 - **`descriptor_type`**: Feature descriptor type
 - **`vehicle_trajectory_files`**: Relative paths to trajectory files
 - **`track_id_to_track_name`**: Mapping of track IDs to track names
+- **`camera_params_id_to_session_name`**: Map of camera parameter IDs to session names (optional for single-track inputs)
 
 </details>
 
@@ -325,6 +327,11 @@ These parameters filter keyframes based on geometric criteria - only frames that
 #### 5. Mapping (`<cusfm_base_dir>/kpmap`)
 - `--ba_frame_type=vehicle_rig`: Fix extrinsics but do not optimize them
 - `--optimize_extrinsics --ba_frame_type=vehicle_rig`: Enable extrinsic parameter refinement during bundle adjustment
+- `--output_rgb`: Extract RGB colors for 3D map points from raw images
+  - When enabled, RGB values are sampled from the original images at each 2D keypoint location
+  - The final color for each 3D point is the average RGB across all its observations
+  - Requires `--input_dir` to be set (uses raw images from input directory)
+  - Example: `cusfm_cli --input_dir data/input --cusfm_base_dir results/output --output_rgb`
 
 #### 6. COLMAP Conversion (`<cusfm_base_dir>/sparse`)
 
@@ -340,9 +347,14 @@ Converts poses and sparse 3D maps to COLMAP format for visualization.
 - Binary format (with `--export_binary_colmap_files`): `cameras.bin`, `images.bin`, `points3D.bin`
 
 **Camera Model Support:**
-- `PINHOLE`: Exports as COLMAP PINHOLE model (fx, fy, cx, cy)
-- `DISTORTED_PINHOLE`: Exports as COLMAP FULL_OPENCV model (fx, fy, cx, cy, k1-k6, p1-p2)
-- `FTHETA_WINDSHIELD`: Falls back to PINHOLE model if projection matrix available
+
+The following table shows how pycusfm camera models are mapped to COLMAP camera models during export:
+
+| pycusfm Model | COLMAP Model | Parameters | Description |
+|---------------|--------------|------------|-------------|
+| `PINHOLE` | `PINHOLE` | fx, fy, cx, cy | Standard pinhole camera model |
+| `DISTORTED_PINHOLE` | `FULL_OPENCV` | fx, fy, cx, cy, k1-k6, p1-p2 | Pinhole model with radial and tangential distortion |
+| `FTHETA_WINDSHIELD` | `PINHOLE` | fx, fy, cx, cy | Fisheye camera behind windshield (AV scenarios). No direct COLMAP equivalent, so exports as undistorted PINHOLE using projection matrix intrinsics |
 
 </details>
 

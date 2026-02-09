@@ -6,7 +6,8 @@ import os
 import shutil
 import logging
 from pathlib import Path
-from .command_runner import CommandRunner  # Ensure this import path is correct
+from .command_runner import CommandRunner
+from .cuvslam_runner import CuVSlamRunner
 from .constants import (
     kKEYFRAME_DIR, kPOSE_GRAPH_DIR, kMATCHES_DIR, kMATCHES_TASK_DIR, kMAP_DIR,
     kOPEN_MAP_DIR, kCUVGL_MAP_DIR, kVOC_DIR, kASSOCIATIONS_DIR,
@@ -93,13 +94,17 @@ class CuSFMRunner:
             add_tensorrt_path=True,
             anchor_track="",
             global_localize_succ_sample=10,
-            use_cuvslam_slam_pose=True,
+            use_cuvslam_slam_pose=False,
             skip_track_global_transform=False,
             skip_data_association=False,
             export_binary_colmap_files=False,
-            av_data=False):
+            av_data=False,
+            rgbd_mode=0,
+            cuvslam_config_file=None,
+            output_rgb=False):
 
         self.av_data = av_data
+        self.output_rgb = output_rgb
         self.input_dir = input_dir
         self.cusfm_base_dir = cusfm_base_dir
         # False will use odom pose
@@ -135,6 +140,7 @@ class CuSFMRunner:
         self.export_pose_in_vehicle_frame = export_pose_in_vehicle_frame
         self.add_tensorrt_path = add_tensorrt_path
         self.max_keypoints_num = max_keypoints_num
+        self.cuvslam_config_file = cuvslam_config_file
 
         self.keyframe_dir = os.path.join(self.cusfm_base_dir, kKEYFRAME_DIR)
         self.feature_extractor_batch_size = feature_extractor_batch_size
@@ -162,17 +168,37 @@ class CuSFMRunner:
         # single track data association mode is replaced by  incremental pose_graph because it is better
         self.anchor_track = anchor_track
         self.skip_data_association = skip_data_association
+        self.rgbd_mode = rgbd_mode
         # Enforce data-association only when multi-track is enabled
         if self.multi_track_input:
             self.global_localize_succ_sample = global_localize_succ_sample
             self.skip_data_association = False
 
-        self.runner = CommandRunner(
-            binary_dir=binary_dir,
-            config_dir=config_dir,
-            dry_run=self.dry_run,
-            add_tensorrt_path=self.add_tensorrt_path,
-            runtime_log_dir=self.cusfm_base_dir)
+        # Use BazelCommandRunner if binary_dir is a BazelBinaryDir
+        try:
+            from .runfiles_helper import BazelBinaryDir
+            from .bazel_command_runner import BazelCommandRunner
+            if isinstance(binary_dir, BazelBinaryDir):
+                self.runner = BazelCommandRunner(
+                    binary_dir=binary_dir,
+                    config_dir=config_dir,
+                    dry_run=self.dry_run,
+                    add_tensorrt_path=self.add_tensorrt_path,
+                    runtime_log_dir=self.cusfm_base_dir)
+            else:
+                self.runner = CommandRunner(
+                    binary_dir=binary_dir,
+                    config_dir=config_dir,
+                    dry_run=self.dry_run,
+                    add_tensorrt_path=self.add_tensorrt_path,
+                    runtime_log_dir=self.cusfm_base_dir)
+        except ImportError:
+            self.runner = CommandRunner(
+                binary_dir=binary_dir,
+                config_dir=config_dir,
+                dry_run=self.dry_run,
+                add_tensorrt_path=self.add_tensorrt_path,
+                runtime_log_dir=self.cusfm_base_dir)
         self.logger = logging.getLogger('cusfm_runner')
 
     def run_cuvslam(
@@ -188,76 +214,30 @@ class CuSFMRunner:
             str: Path to keyframe metadata file with pose information.
                 - If skip_cuvslam=True: Returns input metadata file path (no processing).
                 - If skip_cuvslam=False: Returns updated metadata file path in cuvslam_output_dir.
-
-        Raises:
-            RuntimeError: If pose file not found after CUVSLAM processing.
         """
-        if override_frames_meta_file:
-            keyframe_file_to_use = override_frames_meta_file
-        else:
-            keyframe_file_to_use = os.path.join(input_dir, kFRAME_META_FILE)
-
         if self.skip_cuvslam:
-            return keyframe_file_to_use
+            if override_frames_meta_file:
+                return override_frames_meta_file
+            else:
+                return os.path.join(input_dir, kFRAME_META_FILE)
 
-        log_dir = os.path.join(cuvslam_output_dir, 'logs')
-        os.makedirs(log_dir, exist_ok=True)
+        # Delegate to CuVSlamRunner
+        # Note: We need to access binary_dir from self.runner
+        # Assuming CommandRunner exposes binary_dir
+        binary_dir = self.runner.binary_dir
 
-        # first convert keyframe metadata to edex
-        self.runner.run_binary(
-            'keyframe_metadata_to_edex_main', [
-                "--keyframe_metadata_file", keyframe_file_to_use,
-                "--output_edex_dir", input_dir
-            ],
-            logs_file_path=os.path.join(
-                log_dir, 'keyframe_metadata_to_edex_main.txt'))
+        runner = CuVSlamRunner(
+            binary_dir=binary_dir,
+            config_dir=self.runner.config_dir,
+            config_name=self.cuvslam_config_file,
+            dry_run=self.dry_run,
+            log_dir=os.path.join(cuvslam_output_dir, 'logs'))
 
-        # then run cuvslam_api_launcher
-        self.logger.info("Running cuvslam_api_launcher")
-        self.runner.run_binary(
-            'cuvslam_api_launcher', [
-                "--dataset",
-                input_dir,
-                "--output_map",
-                os.path.join(cuvslam_output_dir, "cuvslam_map"),
-                "--print_format",
-                "tum",
-                "--ros_frame_conversion=true",
-                "--cfg_enable_slam",
-                "--print_odom_poses",
-                os.path.join(cuvslam_output_dir, kODOM_POSES_FILE),
-                "--print_slam_poses",
-                os.path.join(cuvslam_output_dir, kSLAM_POSES_FILE),
-            ],
-            logs_file_path=os.path.join(log_dir, 'cuvslam_api_launcher.txt'))
-
-        # Update poses in frames_meta.json
-        if self.use_cuvslam_slam_pose:
-            use_pose_file = kSLAM_POSES_FILE
-        else:
-            use_pose_file = kODOM_POSES_FILE
-
-        pose_file_path = os.path.join(cuvslam_output_dir, use_pose_file)
-        if not os.path.isfile(pose_file_path):
-            raise RuntimeError(
-                f"Expected pose file not found: {pose_file_path}")
-
-        output_keyframe_metadata_file = os.path.join(
-            cuvslam_output_dir, kFRAME_META_FILE_CUVSLAM)
-
-        self.runner.run_binary(
-            'update_keyframe_pose_main', [
-                "--input_file",
-                keyframe_file_to_use,
-                "--output_file",
-                output_keyframe_metadata_file,
-                "--tum_pose_file",
-                pose_file_path,
-            ],
-            logs_file_path=os.path.join(
-                log_dir, 'update_keyframe_pose_main.txt'))
-
-        return output_keyframe_metadata_file
+        return runner.run(
+            input_dir=input_dir,
+            output_dir=cuvslam_output_dir,
+            override_frames_meta_file=override_frames_meta_file,
+            use_slam_pose=self.use_cuvslam_slam_pose)
 
     def extract_features(
             self, input_dir, keyframe_dir, override_frames_meta_file=""):
@@ -301,6 +281,8 @@ class CuSFMRunner:
                 str(self.debug_interval),
                 "--batch_size",
                 str(self.feature_extractor_batch_size),
+                "--rgbd_mode",
+                str(self.rgbd_mode),
             ]
 
             if self.enable_debug:
@@ -318,6 +300,9 @@ class CuSFMRunner:
                 cmd.extend(
                     ["--max_keypoints_num",
                      str(self.max_keypoints_num)])
+
+            if self.output_rgb:
+                cmd.extend(["--output_rgb"])
 
             self.runner.run_binary(cmd[0], cmd[1:], logs_file_path=logs_file)
             self.logger.info(
@@ -359,26 +344,23 @@ class CuSFMRunner:
             voc_dir = os.path.join(cuvgl_map_dir, kVOC_DIR)
             self.generate_bow(track_keyframe_dir, cuvgl_map_dir, voc_dir)
 
-            # Create symbolic link
-            anchor_keyframe_link = os.path.join(cuvgl_map_dir, "keyframes")
-            if os.path.islink(anchor_keyframe_link) or os.path.isfile(
-                    anchor_keyframe_link):
-                os.unlink(anchor_keyframe_link)
-            elif os.path.isdir(anchor_keyframe_link):
-                shutil.rmtree(anchor_keyframe_link)
-
-            os.symlink(track_keyframe_dir, anchor_keyframe_link)
-            return cuvgl_map_dir
+            return cuvgl_map_dir, track_keyframe_dir
         else:
-            return None
+            return None, None
 
     def align_track_to_cuvglmap(
-            self, track_dir, cuvgl_map_dir, result_dir, cuvslam_output_dir):
+            self,
+            track_dir,
+            cuvgl_map_dir,
+            result_dir,
+            cuvslam_output_dir,
+            map_keyframe_dir=""):
         """Align track to CUVGL map
         Args:
             track_dir: Track data directory
             cuvgl_map_dir: CUVGL map directory
             result_dir: Result output directory
+            map_keyframe_dir: Directory containing map keyframes
         """
         self.logger.info("Aligning track to CUVGL map...")
 
@@ -388,15 +370,30 @@ class CuSFMRunner:
         # Run global localizer evaluation
         localizer_logs_file = os.path.join(
             result_dir, 'run_global_localization_main.txt')
+
+        cmd = [
+            "--do_evaluate=true", "--input_image_directory", track_dir,
+            "--localizer_config_folder",
+            os.path.join(self.runner.config_dir), "--map_dir", cuvgl_map_dir,
+            "--result_dir", result_dir, "--model_dir", self.model_dir,
+            "--success_sample_num",
+            str(self.global_localize_succ_sample)
+        ]
+
+        if map_keyframe_dir:
+            cmd.extend(["--keyframe_dir", map_keyframe_dir])
+
+        # Pass vocabulary paths if they exist
+        voc_dir = os.path.join(cuvgl_map_dir, kVOC_DIR)
+        bow_index_file = os.path.join(cuvgl_map_dir, "bow_index.pb")
+        if os.path.isdir(voc_dir):
+            cmd.extend(["--vocabulary_dir", voc_dir])
+        if os.path.isfile(bow_index_file):
+            cmd.extend(["--bow_index_file", bow_index_file])
+
         self.runner.run_binary(
-            'run_global_localization_main', [
-                "--do_evaluate=true", "--input_image_directory", track_dir,
-                "--localizer_config_folder",
-                os.path.join(self.runner.config_dir), "--map_dir",
-                cuvgl_map_dir, "--result_dir", result_dir, "--model_dir",
-                self.model_dir, "--success_sample_num",
-                str(self.global_localize_succ_sample)
-            ],
+            'run_global_localization_main',
+            cmd,
             logs_file_path=localizer_logs_file)
 
         # Convert ego to global coordinates
@@ -486,7 +483,7 @@ class CuSFMRunner:
         self.runner.ensure_directory_exists(anchor_cuvgl_dir)
 
         # for anchor track, build cuvgl_map use cuvslam
-        anchor_cuvgl_map_dir = self.build_anchor_cuvgl_map(
+        anchor_cuvgl_map_dir, anchor_keyframe_dir = self.build_anchor_cuvgl_map(
             cuvslam_dir, anchor_cuvgl_dir)
 
         # for un-anchor track
@@ -509,7 +506,7 @@ class CuSFMRunner:
                 result_dir = os.path.join(anchor_cuvgl_dir, track_name)
                 global_pose_meta_data_file = self.align_track_to_cuvglmap(
                     track_dir, anchor_cuvgl_map_dir, result_dir,
-                    track_cuvslam_output_dir)
+                    track_cuvslam_output_dir, anchor_keyframe_dir)
             else:
                 global_pose_meta_data_file = cuvslam_output_keyframe_metadata_file
 
@@ -556,12 +553,6 @@ class CuSFMRunner:
                         'image_retrieval_config.pb.txt')
                 ],
                 logs_file_path=bow_index_logs_file)
-
-            keyframe_link = os.path.join(cuvgl_dir, "keyframes")
-            if os.path.islink(keyframe_link) or os.path.isfile(keyframe_link):
-                os.unlink(keyframe_link)
-
-            os.symlink(keyframe_dir, keyframe_link)
 
             self.logger.info("\033[0;32m BoW Build Finished ...\033[0m")
 
@@ -682,8 +673,15 @@ class CuSFMRunner:
                 task_builder_args.extend(
                     ["--pose_graph_association_dir", self.pose_graph_dir])
             else:
-                task_builder_args.extend(
-                    ["--pose_graph_association_dir", self.association_dir])
+                # Check if pose graph file exists in pose_graph_dir from a previous run
+                pose_graph_file = os.path.join(
+                    self.pose_graph_dir, "pose_graph.pb.txt")
+                if os.path.exists(pose_graph_file):
+                    task_builder_args.extend(
+                        ["--pose_graph_association_dir", self.pose_graph_dir])
+                else:
+                    task_builder_args.extend(
+                        ["--pose_graph_association_dir", self.association_dir])
 
             if self.previous_cusfm_ws != "":
                 task_builder_args.extend(
@@ -790,11 +788,13 @@ class CuSFMRunner:
                 f'--use_vehicle_trajectory={self.use_vehicle_trajectory}',
             ]
 
-            if not self.skip_pose_graph:
-                new_frame_meta_file = os.path.join(
-                    self.pose_graph_dir, kFRAME_META_FILE)
+            ## skip_pose_graph but the result is already saved
+            new_frame_meta_file = os.path.join(
+                self.pose_graph_dir, kFRAME_META_FILE)
+            if os.path.exists(new_frame_meta_file):
                 cmd.extend(["--keyframe_metadata_file", new_frame_meta_file])
-            elif self.previous_cusfm_ws != "":
+
+            if self.previous_cusfm_ws != "":
                 new_frame_meta_file = os.path.join(
                     self.tasks_dir, kFRAME_META_FILE)
                 cmd.extend(
@@ -886,28 +886,21 @@ class CuSFMRunner:
             cmd_args = [
                 "--map_dir", self.map_dir, "--output_dir", self.open_map_dir
             ]
+
+            # Pass vocabulary paths
+            if os.path.isdir(self.voc_dir):
+                cmd_args.extend(["--vocabulary_dir", self.voc_dir])
+
+            bow_index_file = os.path.join(self.cuvgl_dir, "bow_index.pb")
+            if os.path.isfile(bow_index_file):
+                cmd_args.extend(["--bow_index_file", bow_index_file])
+
             if self.export_binary_colmap_files:
                 cmd_args.append("--binary")
 
             self.runner.run_binary(
                 'kpmap_to_colmap', cmd_args, logs_file_path=logs_file)
             self.logger.info("\033[0;32m Map Conversion Finished ...\033[0m")
-
-    def add_bow_for_map_localizer(self, kpmap, cuvgl_map_dir):
-        kpmap_voc_link = os.path.join(kpmap, "vocabulary")
-        voc_dir = os.path.join(cuvgl_map_dir, "vocabulary")
-        if os.path.islink(kpmap_voc_link) or os.path.isfile(kpmap_voc_link):
-            os.unlink(kpmap_voc_link)
-
-        os.symlink(voc_dir, kpmap_voc_link)
-
-        kpmap_index_link = os.path.join(kpmap, "bow_index.pb")
-        index_file = os.path.join(cuvgl_map_dir, "bow_index.pb")
-        if os.path.islink(kpmap_index_link) or os.path.isfile(
-                kpmap_index_link):
-            os.unlink(kpmap_index_link)
-
-        os.symlink(index_file, kpmap_index_link)
 
     def convert_poses(
             self,
@@ -997,6 +990,13 @@ class CuSFMRunner:
             else:
                 self.multi_track_keyframe_for_av()
         else:
+            if not self.override_frames_meta_file:
+                cuvslam_metafile = os.path.join(
+                    self.cuvslam_output_dir, kFRAME_META_FILE_CUVSLAM)
+                if os.path.exists(cuvslam_metafile):
+                    self.override_frames_meta_file = cuvslam_metafile
+                    logger.info(f"Using cuvslam metafile: {cuvslam_metafile}")
+
             output_frames_meta_file = self.run_cuvslam(
                 self.input_dir, self.cuvslam_output_dir,
                 self.override_frames_meta_file)
@@ -1021,8 +1021,6 @@ class CuSFMRunner:
         self.match_features()
         self.map_keypoints()
 
-        self.add_bow_for_map_localizer(self.map_dir, self.cuvgl_dir)
-
         self.convert_map()
         self.convert_poses(
             export_pose_in_vehicle_frame=self.export_pose_in_vehicle_frame)
@@ -1038,14 +1036,25 @@ def get_default_cusfm_params(package_path: Path):
     Returns:
         dict: Dictionary containing default CUSFM parameters
     """
+    # Try to use runfiles helper for binary/config/model dirs
+    try:
+        from .runfiles_helper import get_binary_dir, get_config_dir, get_model_dir
+        binary_dir = get_binary_dir()  # Keep as object if it's BazelBinaryDir
+        config_dir = str(get_config_dir())
+        model_dir = str(get_model_dir())
+    except (ImportError, Exception):
+        # Fall back to standard paths
+        binary_dir = str(package_path / 'bin')
+        config_dir = str(package_path / 'configs/isaac')
+        model_dir = str(package_path / 'models')
 
     return {
         'input_dir': '',  # Default empty string
         'cusfm_base_dir': '',  # Must be provided
         'cuvgl_dir': '',  # Default empty string
-        'binary_dir': str(package_path / 'bin'),  # Default path
-        'config_dir': str(package_path / 'configs/isaac'),  # Default path
-        'model_dir': str(package_path / 'models'),  # Default path
+        'binary_dir': binary_dir,  # Default path
+        'config_dir': config_dir,  # Default path
+        'model_dir': model_dir,  # Default path
         'feature_type': 'aliked',  # Default value
         'skip_feature_extractor': False,
         'skip_vocab_generator': False,
@@ -1071,12 +1080,31 @@ def get_default_cusfm_params(package_path: Path):
         'feature_matching_batch_size': 0,
         'export_pose_in_vehicle_frame': True,
         'global_localize_succ_sample': 10,
-        'use_cuvslam_slam_pose': True,
+        'use_cuvslam_slam_pose': False,
         'skip_track_global_transform': False,
         'skip_data_association': True,
         'export_binary_colmap_files': False,  # Default is text format (.txt)
         'av_data': False
     }
+
+
+def get_rgbd_cusfm_params(package_path: Path):
+    """Get CUSFM parameters configured for AV data.
+
+    Args:
+        package_path (Path, optional): Repository root path. If None, uses REPO_PATH constant.
+
+    Returns:
+        dict: Dictionary containing CUSFM parameters optimized for AV data
+    """
+    params = get_default_cusfm_params(package_path)
+
+    # Override defaults with AV-specific settings
+    params.update({
+        'config_dir': str(package_path / 'configs/rgbd'),
+    })
+
+    return params
 
 
 def get_av_data_cusfm_params(package_path: Path):
@@ -1090,10 +1118,21 @@ def get_av_data_cusfm_params(package_path: Path):
     """
     params = get_default_cusfm_params(package_path)
 
+    # Try to use runfiles helper for config_dir
+    try:
+        from .runfiles_helper import get_runfiles_dir
+        runfiles_root = get_runfiles_dir()
+        if runfiles_root:
+            config_dir = str(runfiles_root / 'configs' / 'av')
+        else:
+            config_dir = str(package_path / 'configs/av')
+    except (ImportError, Exception):
+        config_dir = str(package_path / 'configs/av')
+
     # Override defaults with AV-specific settings
     params.update(
         {
-            'config_dir': str(package_path / 'configs/av'),
+            'config_dir': config_dir,
             'downsampling_matches': False,
             'min_inter_frame_distance': 0.0,
             'min_inter_frame_rotation_degrees': 0.0,
@@ -1107,7 +1146,7 @@ def get_av_data_cusfm_params(package_path: Path):
     return params
 
 
-def create_cusfm_runner(package_path=None, av_data=False, **kwargs):
+def create_cusfm_runner(package_path=None, config_set="", **kwargs):
     """Create a default CuSFMRunner instance with optional overrides.
 
     Args:
@@ -1118,26 +1157,49 @@ def create_cusfm_runner(package_path=None, av_data=False, **kwargs):
     Returns:
         CuSFMRunner: Configured CuSFMRunner instance
     """
-
+    # TODO: change to use PYCUSFM_DIR
     if package_path is None:
-        if os.environ.get('PYCUSFM_DIR'):
-            package_path = Path(os.environ.get('PYCUSFM_DIR'))
+        if os.environ.get('VISUAL_MAPPING_DIR'):
+            package_path = Path(os.environ.get('VISUAL_MAPPING_DIR'))
         else:
             try:
-                package_path = Path(
-                    pkg_resources.resource_filename('pycusfm', ''))
+                # Try runfiles_helper first for Bazel environments
+                try:
+                    from .runfiles_helper import get_runfiles_dir
+                    runfiles_root = get_runfiles_dir()
+                    if runfiles_root:
+                        package_path = runfiles_root
+                    else:
+                        raise ImportError("Not running under Bazel")
+                except (ImportError, Exception):
+                    # Fall back to pkg_resources
+                    package_path = Path(
+                        pkg_resources.resource_filename('visual_mapping', ''))
             except (TypeError, AttributeError, ImportError, Exception):
-                # Fallback: get the project root directory (parent of the pycusfm package directory)
+                # Fallback: get the project root directory (parent of the visual_mapping package directory)
                 package_path = Path(__file__).parent
                 print(
                     f"pkg_resources failed, using fallback path: {package_path}"
                 )
 
     # Get base parameters based on av_data flag
-    if av_data:
+    if config_set == "av":
         params = get_av_data_cusfm_params(package_path)
-    else:
+    ## original isaac mean 8 camera carter robot, for INCA or Maven
+    elif config_set == "isaac":
         params = get_default_cusfm_params(package_path)
+    elif config_set == "rgbd":
+        params = get_rgbd_cusfm_params(package_path)
+    elif config_set == "backpack":
+        params = get_default_cusfm_params(package_path)
+        params.update(
+            {
+                'config_dir': str(package_path / 'configs/backpack'),
+                'min_inter_frame_distance': 0.06,
+                'min_inter_frame_rotation_degrees': 1.5,
+            })
+    else:
+        raise ValueError(f"Invalid config_set: {config_set}")
 
     # Override with any provided kwargs
     params.update({k: v for k, v in kwargs.items() if v is not None})
