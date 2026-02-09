@@ -44,10 +44,12 @@ $$
 $$
 
 Where:
+
 - $(f_x, f_y)$: Focal lengths in pixel units
 - $(c_x, c_y)$: Principal point (optical center) in pixel coordinates
 
 After homogeneous division:
+
 $$
 u = f_x \cdot \frac{X}{Z} + c_x, \quad v = f_y \cdot \frac{Y}{Z} + c_y
 $$
@@ -110,6 +112,7 @@ An extended pinhole model that accounts for lens distortion using the OpenCV rat
 #### Mathematical Model
 
 **Step 1: Normalize to camera coordinates**
+
 $$
 x = \frac{X}{Z}, \quad y = \frac{Y}{Z}
 $$
@@ -117,42 +120,51 @@ $$
 **Step 2: Apply distortion**
 
 Compute radial distance:
+
 $$
 r^2 = x^2 + y^2, \quad r^4 = (r^2)^2, \quad r^6 = (r^2)^3
 $$
 
 Radial distortion:
+
 $$
 \text{radial} = 1 + k_1 r^2 + k_2 r^4 + k_3 r^6
 $$
 
 Rational distortion:
+
 $$
 \text{rational} = 1 + k_4 r^2 + k_5 r^4 + k_6 r^6
 $$
 
 Combined radial-rational factor:
+
 $$
 \text{radial\_rational} = \frac{\text{radial}}{\text{rational}}
 $$
 
 Tangential distortion:
+
 $$
 \Delta x_t = 2 p_1 x y + p_2 (r^2 + 2x^2)
 $$
+
 $$
 \Delta y_t = p_1 (r^2 + 2y^2) + 2 p_2 x y
 $$
 
 **Step 3: Compute distorted coordinates**
+
 $$
 x' = x \cdot \text{radial\_rational} + \Delta x_t
 $$
+
 $$
 y' = y \cdot \text{radial\_rational} + \Delta y_t
 $$
 
 **Step 4: Project to pixel coordinates**
+
 $$
 u = f_x \cdot x' + c_x, \quad v = f_y \cdot y' + c_y
 $$
@@ -229,6 +241,7 @@ An OpenCV-compatible fisheye camera model using the equidistant projection with 
 #### Mathematical Model
 
 **Step 1: Normalize to camera coordinates**
+
 $$
 x = \frac{X}{Z}, \quad y = \frac{Y}{Z}
 $$
@@ -236,9 +249,11 @@ $$
 **Step 2: Compute incidence angle**
 
 Compute the radial distance and incidence angle:
+
 $$
 r = \sqrt{x^2 + y^2}
 $$
+
 $$
 \theta = \arctan(r)
 $$
@@ -246,6 +261,7 @@ $$
 **Step 3: Apply fisheye distortion**
 
 The distorted angle is computed using a polynomial:
+
 $$
 \theta_d = \theta \cdot (1 + k_1 \theta^2 + k_2 \theta^4 + k_3 \theta^6 + k_4 \theta^8)
 $$
@@ -253,9 +269,11 @@ $$
 **Step 4: Compute distorted normalized coordinates**
 
 Scale the normalized coordinates by the distortion factor:
+
 $$
 \text{scale} = \frac{\theta_d}{r}
 $$
+
 $$
 x_d = \text{scale} \cdot x, \quad y_d = \text{scale} \cdot y
 $$
@@ -263,6 +281,7 @@ $$
 Note: When $r < 10^{-8}$ (point at the optical center), $x_d = x$ and $y_d = y$.
 
 **Step 5: Project to pixel coordinates**
+
 $$
 u = f_x \cdot x_d + c_x, \quad v = f_y \cdot y_d + c_y
 $$
@@ -272,24 +291,29 @@ $$
 The back-projection from pixel coordinates to 3D ray uses Newton-Raphson iteration to invert the distortion polynomial:
 
 1. Convert pixel to normalized distorted coordinates:
+
 $$
 x_d = \frac{u - c_x}{f_x}, \quad y_d = \frac{v - c_y}{f_y}
 $$
 
 2. Compute distorted radius:
+
 $$
 \theta_d = \sqrt{x_d^2 + y_d^2}
 $$
 
 3. Solve for $\theta$ using Newton-Raphson iteration on:
+
 $$
 f(\theta) = \theta \cdot (1 + k_1 \theta^2 + k_2 \theta^4 + k_3 \theta^6 + k_4 \theta^8) - \theta_d = 0
 $$
 
 4. Compute undistorted coordinates:
+
 $$
 r = \tan(\theta), \quad \text{scale} = \frac{r}{\theta_d}
 $$
+
 $$
 x = \text{scale} \cdot x_d, \quad y = \text{scale} \cdot y_d
 $$
@@ -374,16 +398,19 @@ A specialized fisheye camera model using F-Theta projection with optional windsh
 For a 3D ray $(X, Y, Z)$ in camera coordinates:
 
 1. Compute angle from optical axis:
+
 $$
 \theta = \arctan\left(\frac{\sqrt{X^2 + Y^2}}{Z}\right)
 $$
 
 2. Compute azimuth angle:
+
 $$
 \psi = \arctan2(Y, X)
 $$
 
 3. Apply forward polynomial to get distorted radius:
+
 $$
 r_d = f(\theta) = k_0 + k_1 \theta + k_2 \theta^2 + k_3 \theta^3 + k_4 \theta^4 + k_5 \theta^5
 $$
@@ -391,11 +418,13 @@ $$
    Note: When using backward polynomial as reference, Newton's method is applied to compute $r_d$ from the backward polynomial.
 
 4. Convert to distorted normalized coordinates:
+
 $$
 d_x = r_d \cos(\psi), \quad d_y = r_d \sin(\psi)
 $$
 
 5. Apply linear transform:
+
 $$
 \begin{bmatrix} d'_x \\ d'_y \end{bmatrix} =
 \begin{bmatrix} c & d \\ e & 1 \end{bmatrix}
@@ -403,6 +432,7 @@ $$
 $$
 
 6. Add principal point offset:
+
 $$
 u = d'_x + \text{ppx}, \quad v = d'_y + \text{ppy}
 $$
@@ -410,6 +440,7 @@ $$
 **Backward Polynomial:**
 
 The backward polynomial maps from distorted image radius $r$ to angle $\theta$:
+
 $$
 b(r) = j_0 + j_1 r + j_2 r^2 + j_3 r^3 + j_4 r^4 + j_5 r^5
 $$
@@ -455,27 +486,33 @@ The windshield is modeled as a view-dependent ray mapping that transforms the or
 For a 3D ray $(X, Y, Z)$ in camera coordinates:
 
 1. Normalize the ray:
+
 $$
 \hat{X} = \frac{X}{\|r\|}, \quad \hat{Y} = \frac{Y}{\|r\|}, \quad \hat{Z} = \frac{Z}{\|r\|}
 $$
 
 2. Compute horizontal and vertical angles:
+
 $$
 \phi = \arcsin(\hat{X})
 $$
+
 $$
 \theta = \arcsin(\hat{Y})
 $$
 
 3. Apply bivariate polynomials to compute refracted angles:
+
 $$
 \phi' = P_\phi(\phi, \theta) = \sum_{i=0}^{n} \sum_{j=0}^{n-i} a_{ij} \phi^i \theta^j
 $$
+
 $$
 \theta' = P_\theta(\phi, \theta) = \sum_{i=0}^{m} \sum_{j=0}^{m-i} b_{ij} \phi^i \theta^j
 $$
 
 4. Convert back to ray direction:
+
 $$
 X' = \sin(\phi'), \quad Y' = \sin(\theta'), \quad Z' = \sqrt{1 - X'^2 - Y'^2}
 $$
@@ -496,6 +533,7 @@ The windshield model uses bivariate polynomials with configurable degrees:
 | `theta_poly_coefficients` | Coefficients for theta polynomial (15 coefficients for degree 4) |
 
 The number of coefficients for a 2D polynomial of degree $n$ is:
+
 $$
 \frac{(n+1)(n+2)}{2}
 $$
@@ -640,6 +678,7 @@ For rolling shutter correction, `EGO_MOTION` or `ABSOLUTE_POSE` trajectories are
 For a frame with `num_rows` rows and total readout time `T`:
 - The last row is captured at the reference timestamp `t_ref`
 - Row `r` is captured at time:
+
 $$
 t(r) = t_{ref} - T \cdot \frac{(\text{num\_rows} - 1 - r)}{\text{num\_rows} - 1}
 $$
