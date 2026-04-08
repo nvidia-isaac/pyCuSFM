@@ -10,9 +10,8 @@ from pathlib import Path
 from .command_runner import CommandRunner
 from .split_repeated_poses import RepeatedPoseSplitter
 from .constants import (
-    kFRAME_META_FILE, kFRAME_META_FILE_CUVSLAM,
-    kSLAM_POSES_FILE, kODOM_POSES_FILE
-)
+    kFRAME_META_FILE, kFRAME_META_FILE_CUVSLAM, kSLAM_POSES_FILE,
+    kODOM_POSES_FILE)
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +19,8 @@ logger = logging.getLogger(__name__)
 def get_default_config_dir(package_path=None):
     if package_path is None:
         try:
-            package_path = Path(pkg_resources.resource_filename('visual_mapping', ''))
+            package_path = Path(
+                pkg_resources.resource_filename('visual_mapping', ''))
         except Exception:
             package_path = Path(__file__).parent.parent
 
@@ -32,7 +32,14 @@ def get_default_config_dir(package_path=None):
 
 
 class CuVSlamRunner:
-    def __init__(self, binary_dir, config_dir=None, config_name=None, dry_run=False, log_dir=None):
+
+    def __init__(
+            self,
+            binary_dir,
+            config_dir=None,
+            config_name=None,
+            dry_run=False,
+            log_dir=None):
         """
         Initialize CuVSlamRunner.
 
@@ -56,8 +63,7 @@ class CuVSlamRunner:
             config_dir=config_dir,
             dry_run=dry_run,
             add_tensorrt_path=False,
-            runtime_log_dir=log_dir
-        )
+            runtime_log_dir=log_dir)
 
     def load_config(self):
         """Load cuvslam configuration from YAML file."""
@@ -75,8 +81,7 @@ class CuVSlamRunner:
                 return {}
         except Exception as e:
             logger.warning(
-                f"Failed to load cuvslam config from {config_path}: {e}"
-            )
+                f"Failed to load cuvslam config from {config_path}: {e}")
             return {}
 
     def _add_parameters(self, command, config, log_dir):
@@ -105,7 +110,8 @@ class CuVSlamRunner:
             denoising = str(config["cfg_denoising"]).lower()
             command.append(f'--cfg_denoising={denoising}')
         if 'cfg_max_frame_delta_s' in config:
-            command.append(f'--cfg_max_frame_delta_s={config["cfg_max_frame_delta_s"]}')
+            command.append(
+                f'--cfg_max_frame_delta_s={config["cfg_max_frame_delta_s"]}')
         if 'cfg_horizontal' in config:
             horizontal = str(config["cfg_horizontal"]).lower()
             command.append(f'--cfg_horizontal={horizontal}')
@@ -122,14 +128,16 @@ class CuVSlamRunner:
 
         # SLAM algorithm configuration
         if 'cfg_multicam_mode' in config:
-            command.append(f'--cfg_multicam_mode={config["cfg_multicam_mode"]}')
+            command.append(
+                f'--cfg_multicam_mode={config["cfg_multicam_mode"]}')
         if 'cfg_odom_mode' in config:
             command.append(f'--cfg_odom_mode={config["cfg_odom_mode"]}')
         if 'cfg_planar' in config:
             planar = str(config["cfg_planar"]).lower()
             command.append(f'--cfg_planar={planar}')
         if 'cfg_slam_max_map_size' in config:
-            command.append(f'--cfg_slam_max_map_size={config["cfg_slam_max_map_size"]}')
+            command.append(
+                f'--cfg_slam_max_map_size={config["cfg_slam_max_map_size"]}')
         if 'cfg_sync_slam' in config:
             sync_slam = str(config["cfg_sync_slam"]).lower()
             command.append(f'--cfg_sync_slam={sync_slam}')
@@ -148,12 +156,15 @@ class CuVSlamRunner:
 
         # Depth camera settings
         if 'cfg_enable_depth_stereo_tracking' in config:
-            depth_tracking = str(config["cfg_enable_depth_stereo_tracking"]).lower()
-            command.append(f'--cfg_enable_depth_stereo_tracking={depth_tracking}')
+            depth_tracking = str(
+                config["cfg_enable_depth_stereo_tracking"]).lower()
+            command.append(
+                f'--cfg_enable_depth_stereo_tracking={depth_tracking}')
         if 'cfg_depth_camera' in config:
             command.append(f'--cfg_depth_camera={config["cfg_depth_camera"]}')
         if 'cfg_depth_scale_factor' in config:
-            command.append(f'--cfg_depth_scale_factor={config["cfg_depth_scale_factor"]}')
+            command.append(
+                f'--cfg_depth_scale_factor={config["cfg_depth_scale_factor"]}')
 
         # Export & debug settings
         if 'cfg_enable_export' in config:
@@ -179,7 +190,8 @@ class CuVSlamRunner:
         if 'loc_input_hints' in config:
             command.append(f'--loc_input_hints={config["loc_input_hints"]}')
         if 'loc_hint_ts_format' in config:
-            command.append(f'--loc_hint_ts_format={config["loc_hint_ts_format"]}')
+            command.append(
+                f'--loc_hint_ts_format={config["loc_hint_ts_format"]}')
         if 'loc_hint_noise' in config:
             command.append(f'--loc_hint_noise={config["loc_hint_noise"]}')
         if 'loc_random_rot' in config:
@@ -207,7 +219,13 @@ class CuVSlamRunner:
 
         return command
 
-    def run(self, input_dir, output_dir, override_frames_meta_file="", use_slam_pose=True):
+    def run(
+            self,
+            input_dir,
+            output_dir,
+            override_frames_meta_file="",
+            use_slam_pose=True,
+            rgbd_mode=0):
         """Run CUVSLAM processing to generate pose estimates.
 
         Args:
@@ -228,14 +246,42 @@ class CuVSlamRunner:
         else:
             keyframe_file_to_use = os.path.join(input_dir, kFRAME_META_FILE)
 
+        if rgbd_mode == 4:
+            convert_to_edex = False
+            cuvslam_rgbd_mode = True
+            depth_path_prefix = ""
+        elif rgbd_mode == 5:
+            cuvslam_rgbd_mode = True
+            convert_to_edex = True
+            depth_path_prefix = "depth/original_size/rgb"
+        else:
+            cuvslam_rgbd_mode = False
+            convert_to_edex = True
+            depth_path_prefix = ""
+
         # 1. Convert keyframe metadata to EDEX format
-        self.runner.run_binary(
-            'keyframe_metadata_to_edex_main', [
-                "--keyframe_metadata_file", keyframe_file_to_use,
-                "--output_edex_dir", input_dir
-            ],
-            logs_file_path=os.path.join(log_dir, 'keyframe_metadata_to_edex_main.txt')
-        )
+        if not convert_to_edex:
+            reverse_flag = '--reverse=True'
+        else:
+            reverse_flag = '--reverse=False'
+
+        if rgbd_mode == 5:
+            self.runner.run_binary(
+                'keyframe_metadata_to_edex_main', [
+                    "--keyframe_metadata_file", keyframe_file_to_use,
+                    "--output_edex_dir", input_dir, reverse_flag,
+                    "--depth_path_prefix", depth_path_prefix
+                ],
+                logs_file_path=os.path.join(
+                    log_dir, 'keyframe_metadata_to_edex_main.txt'))
+        else:
+            self.runner.run_binary(
+                'keyframe_metadata_to_edex_main', [
+                    "--keyframe_metadata_file", keyframe_file_to_use,
+                    "--output_edex_dir", input_dir, reverse_flag
+                ],
+                logs_file_path=os.path.join(
+                    log_dir, 'keyframe_metadata_to_edex_main.txt'))
 
         # 2. Run cuvslam_api_launcher
         logger.info("Running cuvslam_api_launcher")
@@ -252,10 +298,14 @@ class CuVSlamRunner:
             slam_filename = "slam_poses_repeated.tum"
 
         cmd = [
-            "--dataset", input_dir,
-            "--output_map", os.path.join(output_dir, "cuvslam_map"),
-            "--print_odom_poses", os.path.join(output_dir, odom_filename),
-            "--print_slam_poses", os.path.join(output_dir, slam_filename),
+            "--dataset",
+            input_dir,
+            "--output_map",
+            os.path.join(output_dir, "cuvslam_map"),
+            "--print_odom_poses",
+            os.path.join(output_dir, odom_filename),
+            "--print_slam_poses",
+            os.path.join(output_dir, slam_filename),
         ]
 
         # Add default flags if not present in config to maintain backward compatibility
@@ -267,24 +317,30 @@ class CuVSlamRunner:
 
         if 'cfg_enable_slam' not in cuvslam_config:
             cmd.append("--cfg_enable_slam")
+            cmd.append("--cfg_enable_export")
+
+        if cuvslam_rgbd_mode:
+            cmd.append("--cfg_odom_mode=2")
+            cmd.append("--cfg_depth_camera=0")
+            cmd.append("--cfg_depth_scale_factor=1000.0")
 
         cmd = self._add_parameters(cmd, cuvslam_config, log_dir)
 
         self.runner.run_binary(
             'cuvslam_api_launcher',
             cmd,
-            logs_file_path=os.path.join(log_dir, 'cuvslam_api_launcher.txt')
-        )
+            logs_file_path=os.path.join(log_dir, 'cuvslam_api_launcher.txt'))
 
         # 3. Post-process if repeating
         if repeat_count > 1:
-            logger.info(f"Repeat count {repeat_count} > 1. Splitting repeated poses...")
+            logger.info(
+                f"Repeat count {repeat_count} > 1. Splitting repeated poses..."
+            )
             try:
                 splitter = RepeatedPoseSplitter(
                     poses_dir=Path(output_dir),
                     edx_dir=Path(input_dir),
-                    repeat_count=repeat_count
-                )
+                    repeat_count=repeat_count)
                 splitter.process_all_files()
             except Exception as e:
                 logger.error(f"Failed to split repeated poses: {e}")
@@ -295,17 +351,22 @@ class CuVSlamRunner:
         pose_file_path = os.path.join(output_dir, use_pose_file)
 
         if not os.path.isfile(pose_file_path) and not self.dry_run:
-            raise RuntimeError(f"Expected pose file not found: {pose_file_path}")
+            raise RuntimeError(
+                f"Expected pose file not found: {pose_file_path}")
 
-        output_keyframe_metadata_file = os.path.join(output_dir, kFRAME_META_FILE_CUVSLAM)
+        output_keyframe_metadata_file = os.path.join(
+            output_dir, kFRAME_META_FILE_CUVSLAM)
 
         self.runner.run_binary(
             'update_keyframe_pose_main', [
-                "--input_file", keyframe_file_to_use,
-                "--output_file", output_keyframe_metadata_file,
-                "--tum_pose_file", pose_file_path,
+                "--input_file",
+                keyframe_file_to_use,
+                "--output_file",
+                output_keyframe_metadata_file,
+                "--tum_pose_file",
+                pose_file_path,
             ],
-            logs_file_path=os.path.join(log_dir, 'update_keyframe_pose_main.txt')
-        )
+            logs_file_path=os.path.join(
+                log_dir, 'update_keyframe_pose_main.txt'))
 
         return output_keyframe_metadata_file

@@ -194,6 +194,11 @@ def main():
         default=None,
         help='Rotation distance.')
     parser.add_argument(
+        '--min_inter_frame_duration_sec',
+        type=float,
+        default=0,
+        help='frame timestamp difference.')
+    parser.add_argument(
         '--sample_sync_threshold_microseconds',
         type=int,
         help=(
@@ -309,6 +314,7 @@ def main():
         cuvgl_dir=args.cuvgl_dir,
         min_inter_frame_distance=args.min_inter_frame_distance,
         min_inter_frame_rotation_degrees=args.min_inter_frame_rotation_degrees,
+        min_inter_frame_duration_sec=args.min_inter_frame_duration_sec,
         sample_sync_threshold_microseconds=args.
         sample_sync_threshold_microseconds,
         stereo_pair_non_baseline_max_distance=args.

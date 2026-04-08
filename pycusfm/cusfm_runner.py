@@ -77,6 +77,7 @@ class CuSFMRunner:
             ba_frame_type=None,
             min_inter_frame_distance=0.5,
             min_inter_frame_rotation_degrees=5,
+            min_inter_frame_duration_sec=0,
             dry_run=False,
             multi_track_input=False,
             downsampling_matches=True,
@@ -94,7 +95,7 @@ class CuSFMRunner:
             add_tensorrt_path=True,
             anchor_track="",
             global_localize_succ_sample=10,
-            use_cuvslam_slam_pose=False,
+            use_cuvslam_slam_pose=True,
             skip_track_global_transform=False,
             skip_data_association=False,
             export_binary_colmap_files=False,
@@ -132,6 +133,7 @@ class CuSFMRunner:
         self.do_rolling_shutter_correction = use_roll_shutter_correction
         self.min_inter_frame_distance = min_inter_frame_distance
         self.min_inter_frame_rotation_degrees = min_inter_frame_rotation_degrees
+        self.min_inter_frame_duration_sec = min_inter_frame_duration_sec
         self.sample_sync_threshold_microseconds = sample_sync_threshold_microseconds
         self.stereo_pair_non_baseline_max_distance = stereo_pair_non_baseline_max_distance
         self.use_vehicle_trajectory = use_vehicle_trajectory
@@ -237,7 +239,8 @@ class CuSFMRunner:
             input_dir=input_dir,
             output_dir=cuvslam_output_dir,
             override_frames_meta_file=override_frames_meta_file,
-            use_slam_pose=self.use_cuvslam_slam_pose)
+            use_slam_pose=self.use_cuvslam_slam_pose,
+            rgbd_mode=self.rgbd_mode)
 
     def extract_features(
             self, input_dir, keyframe_dir, override_frames_meta_file=""):
@@ -271,6 +274,8 @@ class CuSFMRunner:
                 str(self.min_inter_frame_distance),
                 "--min_inter_frame_rotation_degrees",
                 str(self.min_inter_frame_rotation_degrees),
+                "--min_inter_frame_duration_sec",
+                str(self.min_inter_frame_duration_sec),
                 "--sample_sync_threshold_microseconds",
                 str(self.sample_sync_threshold_microseconds),
                 "--stereo_pair_non_baseline_max_distance",
@@ -599,12 +604,39 @@ class CuSFMRunner:
             pose_graph_logs_file = os.path.join(
                 self.pose_graph_dir, 'pose_graph_main.txt')
 
+            if self.min_inter_frame_distance < 0.5 or self.min_inter_frame_rotation_degrees < 5:
+                use_pose_graph_downsample = True
+            else:
+                use_pose_graph_downsample = False
+
+            ## pose_graph only work for 0.5 and 5 downsample mode
+            kf_frame_meta_file = os.path.join(
+                self.keyframe_dir, kFRAME_META_FILE)
+            use_frame_meta_file = kf_frame_meta_file
+            if use_pose_graph_downsample:
+                self.logger.info("Downsampling keyframes for pose graph ...")
+                use_frame_meta_file = os.path.join(
+                    self.keyframe_dir, "pg_downsampled_frames_meta.json")
+                cmd = [
+                    'keyframe_selector_main', "--frames_meta_file",
+                    kf_frame_meta_file, "--output_frames_meta_file",
+                    use_frame_meta_file, "--min_inter_frame_distance",
+                    str(0.5), "--min_inter_frame_rotation_degrees",
+                    str(5)
+                ]
+
+                self.runner.run_binary(
+                    'keyframe_selector_main',
+                    cmd,
+                    logs_file_path=pose_graph_logs_file)
+
             cmd = [
                 'pose_graph_main', "--keyframe_directory", self.keyframe_dir,
                 "--match_directory", self.matches_dir, "--voc_directory",
                 self.cuvgl_dir, "--config_directory",
                 self.runner.get_config_folder(), "--pose_graph_directory",
-                self.pose_graph_dir, '--model_dir', self.model_dir
+                self.pose_graph_dir, '--model_dir', self.model_dir,
+                '--frames_meta_file', use_frame_meta_file
             ]
 
             if self.enable_debug:
@@ -617,6 +649,54 @@ class CuSFMRunner:
 
             self.runner.run_binary(
                 cmd[0], cmd[1:], logs_file_path=pose_graph_logs_file)
+
+            if use_pose_graph_downsample:
+                interpolate_method = 2
+                if interpolate_method == 1:
+                    self.runner.run_binary(
+                        'optimize_vo_with_keyframe_pose_main', [
+                            "--input_file", kf_frame_meta_file,
+                            "--output_file",
+                            os.path.join(
+                                self.pose_graph_dir,
+                                kFRAME_META_FILE), "--tum_pose_file",
+                            os.path.join(
+                                self.pose_graph_dir,
+                                "vehicle_pose.tum"), "--max_pose_gap_seconds=2"
+                        ],
+                        logs_file_path=os.path.join(
+                            self.pose_graph_dir,
+                            'update_keyframe_pose_main.txt'))
+                else:
+                    kf_tum_file = os.path.join(
+                        self.pose_graph_dir, "vehicle_pose.tum")
+                    output_tum_file = os.path.join(
+                        self.pose_graph_dir, "optimized_all_pose.tum")
+                    vo_tum_file = os.path.join(
+                        self.cuvslam_output_dir, "odom_poses.tum")
+                    bundle_adjustment_config = self.runner.get_config_path(
+                        'vo_pose_optimize_ba_config.pb.txt')
+                    self.runner.run_binary(
+                        'optimize_vo_with_keyframe_pose_main', [
+                            "--vo_tum_file", vo_tum_file, "--output_tum_file",
+                            output_tum_file, "--kf_tum_file", kf_tum_file,
+                            "--bundle_adjustment_config",
+                            bundle_adjustment_config
+                        ],
+                        logs_file_path=os.path.join(
+                            self.pose_graph_dir,
+                            'update_keyframe_pose_main.txt'))
+                    self.runner.run_binary(
+                        'update_keyframe_pose_main', [
+                            "--input_file", kf_frame_meta_file,
+                            "--output_file",
+                            os.path.join(
+                                self.pose_graph_dir, kFRAME_META_FILE),
+                            "--tum_pose_file", output_tum_file
+                        ],
+                        logs_file_path=os.path.join(
+                            self.pose_graph_dir,
+                            'update_keyframe_pose_main.txt'))
 
             self.logger.info("\033[0;32m Pose Graph Finished ...\033[0m")
 
@@ -1075,12 +1155,13 @@ def get_default_cusfm_params(package_path: Path):
         'downsampling_matches': True,
         'min_inter_frame_distance': 0.5,  # Default value
         'min_inter_frame_rotation_degrees': 5.0,  # Default value
+        'min_inter_frame_duration_sec': 0,
         'use_vehicle_trajectory': False,
         'feature_extractor_batch_size': 0,
         'feature_matching_batch_size': 0,
         'export_pose_in_vehicle_frame': True,
         'global_localize_succ_sample': 10,
-        'use_cuvslam_slam_pose': False,
+        'use_cuvslam_slam_pose': True,
         'skip_track_global_transform': False,
         'skip_data_association': True,
         'export_binary_colmap_files': False,  # Default is text format (.txt)
@@ -1100,9 +1181,12 @@ def get_rgbd_cusfm_params(package_path: Path):
     params = get_default_cusfm_params(package_path)
 
     # Override defaults with AV-specific settings
-    params.update({
-        'config_dir': str(package_path / 'configs/rgbd'),
-    })
+    params.update(
+        {
+            'config_dir': str(package_path / 'configs/rgbd'),
+            'min_inter_frame_distance': 0.06,
+            'min_inter_frame_rotation_degrees': 1.5,
+        })
 
     return params
 
@@ -1197,6 +1281,7 @@ def create_cusfm_runner(package_path=None, config_set="", **kwargs):
                 'config_dir': str(package_path / 'configs/backpack'),
                 'min_inter_frame_distance': 0.06,
                 'min_inter_frame_rotation_degrees': 1.5,
+                'use_cuvslam_slam_pose': True,
             })
     else:
         raise ValueError(f"Invalid config_set: {config_set}")
