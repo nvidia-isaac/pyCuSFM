@@ -1,7 +1,12 @@
 #!/bin/bash
 
-# Setup script to create symlinks for CUDA lib and bin folders
-# Usage: ./setup.bash cuda12|cuda13
+# Setup script to create symlinks for platform-specific lib and bin folders
+# Usage: ./setup.bash <platform>
+#
+# Supported platforms:
+#   x86_64:  cuda12, cuda13
+#   Jetson:  jp6 (Orin, Jetpack 6, CUDA 12)
+#            jp7 (Thor, Jetpack 7, CUDA 13)
 
 set -e
 
@@ -10,13 +15,49 @@ PYCUSFM_DIR="$SCRIPT_DIR/pycusfm"
 
 # Function to display usage
 usage() {
-    echo "Usage: $0 <cuda_version>"
-    echo "  cuda_version: cuda12 or cuda13"
+    echo "Usage: $0 <platform>"
     echo ""
-    echo "Example:"
-    echo "  $0 cuda12    # Create symlinks for CUDA 12"
-    echo "  $0 cuda13    # Create symlinks for CUDA 13"
+    echo "For x86_64 systems:"
+    echo "  $0 cuda12              # x86_64 with CUDA 12"
+    echo "  $0 cuda13              # x86_64 with CUDA 13"
+    echo ""
+    echo "For Jetson systems:"
+    echo "  $0 jp6                 # Orin (Jetpack 6, CUDA 12)"
+    echo "  $0 jp7                 # Thor (Jetpack 7, CUDA 13)"
+    echo ""
+    echo "Auto-detect:"
+    echo "  $0 auto                # Auto-detect platform"
     exit 1
+}
+
+# Function to auto-detect platform
+auto_detect_platform() {
+    local arch=$(uname -m)
+    
+    if [ "$arch" = "aarch64" ]; then
+        # On ARM, check Jetpack version from /etc/nv_tegra_release
+        if [ -f "/etc/nv_tegra_release" ]; then
+            local r_version=$(grep -oP '# R\K\d+' /etc/nv_tegra_release 2>/dev/null || echo "0")
+            if [ "$r_version" -ge 38 ]; then
+                echo "jp7"  # JP7 (Thor)
+                return 0
+            elif [ "$r_version" -ge 36 ]; then
+                echo "jp6"  # JP6 (Orin)
+                return 0
+            fi
+        fi
+        echo ""  # Unknown Jetson
+    else
+        # On x86_64, check CUDA version
+        local cuda_version=$(nvcc --version 2>/dev/null | grep -oP 'release \K\d+' || echo "")
+        if [ "$cuda_version" = "13" ]; then
+            echo "cuda13"
+        elif [ "$cuda_version" = "12" ]; then
+            echo "cuda12"
+        else
+            echo ""  # Unknown
+        fi
+    fi
 }
 
 # Function to remove existing symlinks
@@ -32,16 +73,40 @@ cleanup_symlinks() {
     fi
 }
 
+# Function to get source directory from config
+get_source_dir() {
+    local config=$1
+    case $config in
+        cuda12)
+            echo "x86_cuda12"
+            ;;
+        cuda13)
+            echo "x86_cuda13"
+            ;;
+        jp6|jp7)
+            echo "$config"
+            ;;
+        *)
+            echo ""
+            ;;
+    esac
+}
+
 # Function to create symlinks
 create_symlinks() {
-    local cuda_version=$1
-    local source_dir="$PYCUSFM_DIR/x86_$cuda_version"
+    local config=$1
+    local source_subdir=$(get_source_dir "$config")
+    local source_dir="$PYCUSFM_DIR/$source_subdir"
 
-    echo "Creating symlinks for $cuda_version..."
+    echo "Creating symlinks for $config..."
+    echo "  Source directory: $source_subdir"
 
     # Check if source directories exist
     if [ ! -d "$source_dir/bin" ]; then
         echo "Error: $source_dir/bin does not exist"
+        echo ""
+        echo "Available platform directories:"
+        ls -d "$PYCUSFM_DIR"/x86_* "$PYCUSFM_DIR"/jp* 2>/dev/null | xargs -n1 basename || echo "  None found"
         exit 1
     fi
 
@@ -51,30 +116,41 @@ create_symlinks() {
     fi
 
     # Create symlinks
-    ln -sf "x86_$cuda_version/bin" "$PYCUSFM_DIR/bin"
-    ln -sf "x86_$cuda_version/lib" "$PYCUSFM_DIR/lib"
+    ln -sf "$source_subdir/bin" "$PYCUSFM_DIR/bin"
+    ln -sf "$source_subdir/lib" "$PYCUSFM_DIR/lib"
 
-    echo "  Created bin symlink: $PYCUSFM_DIR/bin -> x86_$cuda_version/bin"
-    echo "  Created lib symlink: $PYCUSFM_DIR/lib -> x86_$cuda_version/lib"
+    echo "  Created bin symlink: $PYCUSFM_DIR/bin -> $source_subdir/bin"
+    echo "  Created lib symlink: $PYCUSFM_DIR/lib -> $source_subdir/lib"
 }
 
 # Main script
 main() {
     # Check if argument is provided
     if [ $# -ne 1 ]; then
-        echo "Error: Missing CUDA version argument"
+        echo "Error: Missing platform argument"
         usage
     fi
 
-    local cuda_version=$1
+    local config=$1
 
-    # Validate CUDA version
-    case $cuda_version in
-        cuda12|cuda13)
+    # Handle auto-detection
+    if [ "$config" = "auto" ]; then
+        echo "Auto-detecting platform..."
+        config=$(auto_detect_platform)
+        if [ -z "$config" ]; then
+            echo "Error: Could not auto-detect platform"
+            echo "Please specify manually."
+            usage
+        fi
+        echo "Detected: $config"
+    fi
+
+    # Validate configuration
+    case $config in
+        cuda12|cuda13|jp6|jp7)
             ;;
         *)
-            echo "Error: Invalid CUDA version '$cuda_version'"
-            echo "Supported versions: cuda12, cuda13"
+            echo "Error: Invalid platform '$config'"
             usage
             ;;
     esac
@@ -85,23 +161,39 @@ main() {
         exit 1
     fi
 
-    echo "Setting up CUDA $cuda_version environment..."
+    echo "Setting up $config environment..."
     echo "Working directory: $PYCUSFM_DIR"
 
     # Clean up existing symlinks
     cleanup_symlinks
 
     # Create new symlinks
-    create_symlinks "$cuda_version"
+    create_symlinks "$config"
 
     echo ""
     echo "Setup completed successfully!"
-    echo "CUDA $cuda_version lib and bin directories are now linked in pycusfm/"
 
     # Display current symlinks
     echo ""
     echo "Current symlinks:"
     ls -la "$PYCUSFM_DIR" | grep -E "(bin|lib) ->"
+    
+    # Print platform info
+    echo ""
+    case $config in
+        cuda12)
+            echo "Platform: x86_64 CUDA 12"
+            ;;
+        cuda13)
+            echo "Platform: x86_64 CUDA 13"
+            ;;
+        jp6)
+            echo "Platform: Orin (Jetpack 6, CUDA 12)"
+            ;;
+        jp7)
+            echo "Platform: Thor (Jetpack 7, CUDA 13)"
+            ;;
+    esac
 }
 
 # Run main function with all arguments
